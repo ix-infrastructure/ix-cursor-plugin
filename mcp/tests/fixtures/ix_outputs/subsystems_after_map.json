@@ -1,0 +1,42 @@
+{
+  "file_count": 13,
+  "region_count": 3,
+  "levels": 2,
+  "map_rev": 102,
+  "outcome": "ok",
+  "regions": [
+    {
+      "label": "Hooks",
+      "label_kind": "region",
+      "level": 1,
+      "files": 5,
+      "children": 0,
+      "confidence": 0.91,
+      "signals": ["hook", "automation"],
+      "interfaces": 2
+    },
+    {
+      "label": "Tools",
+      "label_kind": "region",
+      "level": 1,
+      "files": 7,
+      "children": 0,
+      "confidence": 0.88,
+      "signals": ["tool", "analysis"],
+      "interfaces": 3
+    },
+    {
+      "label": "Tests",
+      "label_kind": "region",
+      "level": 1,
+      "files": 1,
+      "children": 0,
+      "confidence": 0.94,
+      "signals": ["integration", "verification"],
+      "interfaces": 1
+    }
+  ],
+  "hierarchy": {
+    "root": ["Hooks", "Tools", "Tests"]
+  }
+}

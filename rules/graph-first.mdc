@@ -1,0 +1,34 @@
+---
+description: Graph-first decision rules for ix-memory. Apply when exploring code, locating symbols, or answering structural questions.
+alwaysApply: true
+---
+
+## Graph-First Hierarchy
+
+Follow this sequence. Move to the next step only when the current one is insufficient.
+
+1. **Orient before diving.** Before exploring individual symbols or files, call `ix_subsystems` to understand the repo shape. Skip only if the subsystem is already known.
+2. **Locate before explaining.** Use `ix_locate` to confirm a symbol exists and resolve its canonical name before calling `ix_explain`. Do not call `ix_explain` with a guessed name.
+3. **Explain before reading.** `ix_explain` returns role, connections, callers, and callees from the graph. Call `ix_read` only when you need implementation detail the graph does not provide.
+4. **Prefer Ix over native search for structural questions.** If the question is "where is this defined", "what calls this", "what does this depend on", or "what will this edit affect", use Ix tools before Grep, Glob, or Bash search.
+5. **Do not duplicate hook-injected context.** If briefing context or an `[ix]` answer was already injected in this turn, use it instead of re-running the same query.
+6. **Stop when the question is answered.** Do not run the next phase if the current phase produced sufficient evidence.
+
+## Token Budget Caps
+
+Always apply these limits to keep tool output within budget:
+
+| Tool | Cap |
+|---|---|
+| `ix_text` | `limit: 20` |
+| `ix_locate` / `ix_search` | `limit: 10` |
+| `ix_callers` / `ix_callees` | `limit: 15` |
+| `ix_depends` / `ix_trace` | `depth: 2` max |
+| `ix_read` calls per task | 2 max |
+
+## Fallback Behavior
+
+- **ix unavailable**: proceed with native tools; note that structural data is unavailable.
+- **Empty results from `ix_locate`**: do not assume the symbol is absent — fall back to `ix_text`, then native Grep.
+- **Graph confidence low (< 0.6)**: treat results as orientation only; add a brief caveat before acting on them.
+- **ix_explain returns error**: exit the Ix path, fall back to native tools, do not surface raw error JSON.

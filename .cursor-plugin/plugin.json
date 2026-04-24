@@ -1,0 +1,13 @@
+{
+  "name": "ix-memory",
+  "displayName": "Ix Memory",
+  "version": "0.1.0",
+  "description": "Graph-first Cursor plugin for Ix-backed code understanding and safe repository workflows.",
+  "author": {
+    "name": "Ix"
+  },
+  "skills": "./skills/",
+  "rules": "./rules/",
+  "mcpServers": "./mcp.json",
+  "hooks": "./hooks/hooks.json"
+}

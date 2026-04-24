@@ -1,0 +1,14 @@
+{
+  "riskLevel": "high",
+  "riskSummary": "Shared dependency path detected through hook and tool integrations.",
+  "nextStep": "Generate a change plan and validate affected hooks.",
+  "summary": {
+    "directDependents": 4,
+    "memberLevelCallers": 5
+  },
+  "topImpactedMembers": [
+    { "name": "runIx" },
+    { "name": "parseIxJson" },
+    { "name": "registerIxTool" }
+  ]
+}

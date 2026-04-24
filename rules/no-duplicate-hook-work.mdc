@@ -1,0 +1,43 @@
+---
+description: Anti-duplication rules for ix-memory hooks. Apply to avoid re-running work that hooks have already done in the current turn.
+alwaysApply: true
+---
+
+## No Duplicate Hook Work
+
+Hooks fire automatically at tool boundaries and inject Ix context into the conversation. Repeating that work wastes tokens, slows responses, and can produce inconsistent results.
+
+### Briefing Deduplication
+
+1. **If briefing context is already present in this turn, do not call `ix_briefing` again.** Injected briefing context appears as a block starting with `[ix briefing]` or similar. Treat it as authoritative for the current turn.
+
+2. **Briefing TTL is 10 minutes.** If the conversation began more than 10 minutes ago and significant new context has been requested, a fresh `ix_briefing` call is appropriate. Otherwise, reuse the injected data.
+
+3. **Do not call `ix_briefing` mid-task to "refresh" orientation** unless the user explicitly asks for an updated briefing or the task has shifted to a completely different subsystem.
+
+### Search and Locate Deduplication
+
+4. **If a hook already resolved a symbol** (via `[ix]` context block or pre-search injection), do not call `ix_locate` or `ix_text` for the same query in the same turn. Use the resolved result directly.
+
+5. **Do not repeat an Ix query that returned a result this turn.** Before calling any Ix tool, check whether the same query was already run and produced output. If it did, use the cached result.
+
+### Impact Deduplication
+
+6. **If the pre-edit hook already ran `ix_impact` for the file being edited**, do not call `ix_impact` again for the same file in the same turn. The hook result is valid for the duration of the edit.
+
+### General Rule
+
+7. **One query per question per turn.** If you already have graph evidence that answers the current question — from any source, including hook injections — use it. Do not re-query for confirmation unless the evidence is ambiguous or stale.
+
+### What Counts as "Already Done"
+
+- A `[ix]` marker in the conversation context from this turn
+- An injected briefing, impact warning, or search result visible in the current context window
+- A tool result from an Ix MCP tool call made earlier in this same turn
+
+### When Re-querying Is Allowed
+
+- The user explicitly asks you to re-check or refresh
+- The prior result was an error or empty
+- The question has materially changed (different symbol, different file, different scope)
+- More than 10 minutes have elapsed (for TTL-bounded data like briefing)

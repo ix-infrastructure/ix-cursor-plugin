@@ -1,0 +1,33 @@
+---
+description: Token budget caps for ix-memory tools. Apply whenever calling Ix MCP tools to keep output within context limits.
+alwaysApply: true
+---
+
+## Token Budget Caps
+
+Always pass these limits when calling Ix tools. Exceeding them fans out context rapidly and degrades response quality.
+
+| Tool | Parameter | Cap | Reason |
+|---|---|---|---|
+| `ix_text` | `limit` | 20 | Full-text hits are verbose; 20 is enough to orient |
+| `ix_locate` | — | 10 results | Symbol search; pick the closest match |
+| `ix_callers` / `ix_callees` | — | 15 results | Caller lists grow large; top 15 covers most patterns |
+| `ix_imported_by` / `ix_imports` | — | 15 results | Same as callers/callees |
+| `ix_depends` | `depth` | 2 | Dependency trees fan out exponentially beyond depth 2 |
+| `ix_trace` | — | depth 2 implied | Trace paths are bounded by the same rule |
+| `ix_read` calls per task | — | 2 max | Source reads are expensive; graph data should suffice for most questions |
+
+## Enforcement Rules
+
+1. **Never omit `limit` on `ix_text`.** Always pass `limit: 20` (or less).
+2. **Never pass `depth` > 2 on `ix_depends` or `ix_trace` without an explicit user request.** If the user asks to "go deeper", cap at 4 and note the risk of large output.
+3. **Count `ix_read` calls across the full task turn.** If you have already called `ix_read` twice, do not call it again — use graph data only.
+4. **If a budget cap is hit and results are truncated**, note this in your response and offer to narrow the scope before re-querying.
+
+## When to Relax a Cap
+
+Relax a cap only when:
+- The user explicitly asks for more results ("show me all callers", "go to depth 5")
+- The current cap produced zero useful results and you have exhausted narrower queries
+
+Even then, double the cap at most — do not remove limits entirely.

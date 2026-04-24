@@ -1,0 +1,103 @@
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
+import { runIx } from "../lib/cli.js";
+import { parseIxJson, type ToolResult, wrapErr, wrapOk } from "../lib/parser.js";
+import { registerIxTool, type ToolInput } from "./base.js";
+
+const TOOL_NAME = "ix_stats";
+const inputSchema = {};
+
+type StatsInput = ToolInput<typeof inputSchema>;
+
+interface CountByKind {
+  kind?: string;
+  count?: number;
+}
+
+interface StatsRaw {
+  nodes?: {
+    total?: number;
+    byKind?: CountByKind[];
+  };
+  edges?: {
+    total?: number;
+    byPredicate?: CountByKind[];
+  };
+}
+
+export function register(server: McpServer): void {
+  registerIxTool(server, {
+    name: TOOL_NAME,
+    description: "Return graph-wide ix statistics for files, symbols, and graph health",
+    schema: inputSchema,
+    handler: runStats,
+  });
+}
+
+async function runStats(input: StatsInput): Promise<ToolResult> {
+  const result = await runIx(["stats"]);
+  if (!result.ok) {
+    return wrapErr(TOOL_NAME, input, {
+      code: "IX_STATS_FAILED",
+      message: formatCommandFailure(result.stderr, "ix stats"),
+    });
+  }
+
+  const raw = parseIxJson(result.stdout) as StatsRaw;
+  const nodeCounts = toCountMap(raw.nodes?.byKind);
+  const edgeCounts = toCountMap(raw.edges?.byPredicate);
+  const fileCount = nodeCounts["file"] ?? 0;
+
+  return wrapOk(
+    TOOL_NAME,
+    input,
+    {
+      symbol_counts: {
+        functions: nodeCounts["function"] ?? 0,
+        classes: nodeCounts["class"] ?? 0,
+        interfaces: nodeCounts["interface"] ?? 0,
+        methods: nodeCounts["method"] ?? 0,
+        modules: nodeCounts["module"] ?? 0,
+        headings: nodeCounts["heading"] ?? 0,
+        sections: nodeCounts["section"] ?? 0,
+      },
+      file_count: fileCount,
+      graph_health: {
+        total_nodes: raw.nodes?.total ?? 0,
+        total_edges: raw.edges?.total ?? 0,
+        region_count: nodeCounts["region"] ?? 0,
+        indexed: (raw.nodes?.total ?? 0) > 0 && fileCount > 0,
+      },
+      raw_counts: {
+        nodes_by_kind: nodeCounts,
+        edges_by_predicate: edgeCounts,
+      },
+    },
+    `Graph stats loaded for ${fileCount} files and ${raw.nodes?.total ?? 0} nodes`,
+    undefined,
+    result.durationMs,
+  );
+}
+
+function toCountMap(entries: CountByKind[] | undefined): Record<string, number> {
+  const result: Record<string, number> = {};
+
+  for (const entry of entries ?? []) {
+    if (!entry.kind) {
+      continue;
+    }
+
+    result[entry.kind] = entry.count ?? 0;
+  }
+
+  return result;
+}
+
+function formatCommandFailure(stderr: string, command: string): string {
+  const detail = stderr.trim();
+  if (detail.length === 0) {
+    return `${command} failed without returning usable output.`;
+  }
+
+  return `${command} failed: ${detail}`;
+}

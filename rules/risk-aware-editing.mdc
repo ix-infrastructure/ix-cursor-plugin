@@ -1,0 +1,41 @@
+---
+description: Risk-aware editing rules for ix-memory. Apply before any meaningful code edit to avoid unintended blast radius.
+alwaysApply: true
+---
+
+## Risk-Aware Editing
+
+### Before Editing
+
+1. **Call `ix_impact` before any meaningful edit.** A "meaningful edit" is any change to a non-trivial symbol — functions, classes, interfaces, exported constants. Skip for documentation-only changes, comment fixes, or new files with no existing dependents.
+
+2. **Interpret `risk_level` before proceeding:**
+
+   | `risk_level` | Action |
+   |---|---|
+   | `low` | Proceed. Note the change briefly. |
+   | `medium` | Proceed, but mention affected dependents in your response. |
+   | `high` | Produce a change plan outline before editing. List the symbols most at risk. |
+   | `critical` | Stop. Do not edit. Generate a full change plan and ask the user to confirm before proceeding. |
+
+3. **Use `recommended_action` from the `ix_impact` result** to determine next steps. The values map directly to the table above:
+   - `safe_to_proceed` → low
+   - `review_callers_first` → medium
+   - `needs_change_plan` → high or critical
+
+### Narrowing Edits
+
+4. **Prefer narrow edits over broad refactors without prior impact analysis.** If a task involves more than 3 files or touches a high-impact symbol, run `ix_impact` on each target before starting.
+
+5. **Do not inline-refactor opportunistically.** If you notice a cleanup opportunity while editing, note it separately rather than expanding the diff. Unsolicited broad changes to high-impact symbols are the primary source of unexpected regressions.
+
+6. **For `high` or `critical` risk targets**, check `ix_callers` and `ix_depends` before editing to understand the propagation path. Summarize the key dependents in your change plan.
+
+### Change Plan Format (for high / critical)
+
+When risk requires a plan, include:
+- The symbol being changed and its `risk_level`
+- The top 3–5 impacted dependents (from `ix_impact` hotspots)
+- The intended change, scoped as narrowly as possible
+- Any callers that will need updates
+- A suggested test checkpoint (what to verify after the edit)

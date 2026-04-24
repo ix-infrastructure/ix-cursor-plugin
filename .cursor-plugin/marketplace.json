@@ -1,0 +1,16 @@
+{
+  "name": "ix-memory-marketplace",
+  "owner": {
+    "name": "Ix"
+  },
+  "metadata": {
+    "description": "Local marketplace manifest for the ix-memory Cursor plugin."
+  },
+  "plugins": [
+    {
+      "name": "ix-memory",
+      "source": ".",
+      "description": "Graph-first Cursor plugin for Ix-backed code understanding and safe repository workflows."
+    }
+  ]
+}

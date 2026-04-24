@@ -1,0 +1,40 @@
+---
+description: Documentation task rules for ix-memory. Apply when writing, updating, or generating documentation for a codebase.
+globs: ["**/*.md", "**/*.mdx", "**/*.rst", "**/docs/**"]
+alwaysApply: false
+---
+
+## Docs Mode
+
+When the task is documentation — writing, updating, or generating docs for a codebase — follow this lower-cost tool sequence. Docs tasks do not require implementation detail; graph data is almost always sufficient.
+
+### Tool Sequence
+
+1. **Start with orientation tools.** Before writing anything, call:
+   - `ix_subsystems` — understand the structural regions
+   - `ix_stats` — confirm scope (file count, symbol counts)
+   - `ix_overview <target>` — get the structural summary of the specific target
+
+2. **Explain before reading.** Call `ix_explain` for any symbol that needs a narrative description. The `rendered.explanation` and `rendered.whyItMatters` fields are documentation-ready text.
+
+3. **Use `ix_decisions` for rationale.** Architecture decisions contain the "why" that source code does not. Always query `ix_decisions` when writing design rationale or architecture docs.
+
+4. **Use `ix_trace` only when runtime behavior is required.** Call `ix_trace` only if the documentation explicitly covers call flow, startup sequence, or request lifecycle. Do not trace speculatively.
+
+5. **Keep source reads scarce.** At most 2 `ix_read` calls per documentation task, and only for illustrative code examples where the source text will appear verbatim. Do not read source to understand structure — use `ix_explain` and `ix_overview` instead.
+
+### What to Avoid
+
+- Do not call `ix_callers` or `ix_callees` for every symbol — docs rarely need full call graphs
+- Do not call `ix_impact` in a docs task unless documenting a high-risk API surface
+- Do not open raw files with Grep or Glob when `ix_explain` would answer the question
+- Do not read source to paraphrase it — paraphrase from `ix_explain` output instead
+
+### Output Structure for Docs
+
+For narrative documentation:
+1. Purpose (from `ix_explain.rendered.explanation`)
+2. Where it fits (from `ix_subsystems` and `ix_overview`)
+3. Key relationships (from `ix_explain.rendered.usedBy`)
+4. Why it matters (from `ix_explain.rendered.whyItMatters` and `ix_decisions`)
+5. Code example (from `ix_read`, only if needed)

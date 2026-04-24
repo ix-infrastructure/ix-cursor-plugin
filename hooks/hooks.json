@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "node mcp/dist/hooks/prompt-briefing.js",
+        "timeout": 10,
+        "failClosed": false
+      }
+    ],
+    "preToolUse": [
+      {
+        "matcher": "Write",
+        "command": "node mcp/dist/hooks/pre-edit.js",
+        "timeout": 10,
+        "failClosed": false
+      },
+      {
+        "matcher": "Grep",
+        "command": "node mcp/dist/hooks/pre-search.js",
+        "timeout": 10,
+        "failClosed": false
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": "node mcp/dist/hooks/post-edit-ingest.js",
+        "timeout": 5,
+        "failClosed": false
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "node mcp/dist/hooks/pre-bash.js",
+        "timeout": 10,
+        "failClosed": false
+      }
+    ],
+    "stop": [
+      {
+        "command": "node mcp/dist/hooks/stop-annotate.js",
+        "timeout": 5,
+        "failClosed": false
+      },
+      {
+        "command": "node mcp/dist/hooks/debounced-map.js",
+        "timeout": 5,
+        "failClosed": false
+      }
+    ]
+  }
+}
