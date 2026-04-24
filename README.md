@@ -34,16 +34,32 @@ npm run build
 
 Assuming the standalone repository is published at `ix-infrastructure/ix-cursor-plugin`, users can install with:
 
+macOS / Linux:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ix-infrastructure/ix-cursor-plugin/main/install.sh | bash
+```
+
+Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -NoProfile -Command "iwr https://raw.githubusercontent.com/ix-infrastructure/ix-cursor-plugin/main/install.ps1 -UseBasicParsing | iex"
 ```
 
 This downloads the repo archive, installs the plugin into `~/.cursor/plugins/local/ix-memory`, and installs/builds MCP dependencies if needed.
 
 To uninstall:
 
+macOS / Linux:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ix-infrastructure/ix-cursor-plugin/main/uninstall.sh | bash
+```
+
+Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -NoProfile -Command "iwr https://raw.githubusercontent.com/ix-infrastructure/ix-cursor-plugin/main/uninstall.ps1 -UseBasicParsing | iex"
 ```
 
 ## Local Install
@@ -134,5 +150,7 @@ For self-hosted installs outside the Marketplace, `install.sh` is the intended e
 - [SPEC.md](./SPEC.md)
 - [plugin/README.md](./plugin/README.md)
 - [install.sh](./install.sh)
+- [install.ps1](./install.ps1)
 - [uninstall.sh](./uninstall.sh)
+- [uninstall.ps1](./uninstall.ps1)
 - [install-local.sh](./install-local.sh)
