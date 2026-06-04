@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { runIx } from "../lib/cli.js";
+import { tryLlm } from "../lib/llm.js";
 import { parseIxJson, wrapErr, wrapOk } from "../lib/parser.js";
 import { registerIxTool } from "./base.js";
 const TOOL_NAME = "ix_depends";
@@ -19,6 +20,9 @@ export function register(server) {
 async function runDepends(input) {
     const depth = input.depth ?? DEFAULT_DEPTH;
     const args = ["depends", input.symbol, "--depth", String(depth)];
+    const fast = await tryLlm(TOOL_NAME, args, { ...input, depth });
+    if (fast)
+        return fast;
     const result = await runIx(args);
     if (!result.ok) {
         return wrapErr(TOOL_NAME, input, {

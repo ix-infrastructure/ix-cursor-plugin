@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { runIx } from "../lib/cli.js";
+import { tryLlm } from "../lib/llm.js";
 import { parseIxJson, wrapErr, wrapOk } from "../lib/parser.js";
 import { registerIxTool } from "./base.js";
 const TOOL_NAME = "ix_locate";
@@ -15,7 +16,11 @@ export function register(server) {
     });
 }
 async function runLocate(input) {
-    const result = await runIx(["locate", input.symbol]);
+    const args = ["locate", input.symbol];
+    const fast = await tryLlm(TOOL_NAME, args, input);
+    if (fast)
+        return fast;
+    const result = await runIx(args);
     if (!result.ok) {
         return wrapErr(TOOL_NAME, input, {
             code: "IX_LOCATE_FAILED",

@@ -21,7 +21,16 @@ export interface ToolResultErr {
         message: string;
     };
 }
-export type ToolResult = ToolResultOk | ToolResultErr;
+export interface ToolResultText {
+    ok: true;
+    tool: string;
+    input: Record<string, unknown>;
+    format: "llm";
+    text: string;
+    timing_ms?: number;
+}
+export type ToolResult = ToolResultOk | ToolResultErr | ToolResultText;
+export declare function isTextResult(result: ToolResult): result is ToolResultText;
 export declare class ParseError extends Error {
     constructor(message: string);
 }
@@ -30,5 +39,6 @@ export declare function wrapErr(tool: string, input: Record<string, unknown>, er
     code: string;
     message: string;
 }): ToolResult;
+export declare function wrapText(tool: string, input: Record<string, unknown>, text: string, durationMs?: number): ToolResultText;
 export declare function parseIxJson(raw: string): unknown;
 //# sourceMappingURL=parser.d.ts.map

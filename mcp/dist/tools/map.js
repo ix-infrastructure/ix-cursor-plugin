@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { runIx } from "../lib/cli.js";
+import { tryLlm } from "../lib/llm.js";
 import { parseIxJson, wrapErr, wrapOk } from "../lib/parser.js";
 import { registerIxTool } from "./base.js";
 const MAP_TOOL = "ix_map";
@@ -70,7 +71,11 @@ async function runMap(input) {
     return wrapOk(MAP_TOOL, input, data, summary, undefined, result.durationMs);
 }
 async function runOverview(input) {
-    const result = await runIx(["overview", input.target]);
+    const args = ["overview", input.target];
+    const fast = await tryLlm(OVERVIEW_TOOL, args, input);
+    if (fast)
+        return fast;
+    const result = await runIx(args);
     if (!result.ok) {
         return wrapErr(OVERVIEW_TOOL, input, {
             code: "IX_OVERVIEW_FAILED",

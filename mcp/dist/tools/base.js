@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { captureError, IxError } from "../lib/errors.js";
-import { ParseError, wrapErr } from "../lib/parser.js";
+import { isTextResult, ParseError, wrapErr } from "../lib/parser.js";
 export function registerIxTool(server, definition) {
     const validator = z.object(definition.schema);
     const registerTool = server.tool.bind(server);
@@ -27,11 +27,15 @@ export function registerIxTool(server, definition) {
     });
 }
 function jsonTextResponse(result) {
+    // llm-format results are forwarded verbatim so the model reads the compact
+    // text directly. Wrapping them in the JSON envelope would re-escape newlines
+    // and erase the token savings, so they bypass JSON.stringify.
+    const text = isTextResult(result) ? result.text : JSON.stringify(result);
     return {
         content: [
             {
                 type: "text",
-                text: JSON.stringify(result),
+                text,
             },
         ],
     };

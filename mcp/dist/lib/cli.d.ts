@@ -13,6 +13,9 @@ export declare function checkHealth(): Promise<boolean>;
 export declare function runIx(args: string[], opts?: {
     timeout?: number;
 }): Promise<IxResult>;
+export declare function runIxLlm(args: string[], opts?: {
+    timeout?: number;
+}): Promise<IxResult>;
 export declare function runIxParallel(calls: ParallelCall[], opts?: {
     timeout?: number;
 }): Promise<Record<string, IxResult>>;

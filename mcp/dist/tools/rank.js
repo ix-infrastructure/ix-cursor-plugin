@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { runIx } from "../lib/cli.js";
+import { tryLlm } from "../lib/llm.js";
 import { parseIxJson, wrapErr, wrapOk } from "../lib/parser.js";
 import { registerIxTool } from "./base.js";
 const TOOL_NAME = "ix_rank";
@@ -33,6 +34,9 @@ async function runRank(input) {
     if (input.path) {
         args.push("--path", input.path);
     }
+    const fast = await tryLlm(TOOL_NAME, args, { by, kind, top, path: input.path });
+    if (fast)
+        return fast;
     const result = await runIx(args);
     if (!result.ok) {
         return wrapErr(TOOL_NAME, input, {

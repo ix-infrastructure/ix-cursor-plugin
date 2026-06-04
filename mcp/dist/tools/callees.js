@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { runIx } from "../lib/cli.js";
+import { tryLlm } from "../lib/llm.js";
 import { parseIxJson, wrapErr, wrapOk } from "../lib/parser.js";
 import { registerIxTool } from "./base.js";
 const CALLEES_TOOL = "ix_callees";
@@ -22,6 +23,9 @@ export function register(server) {
     });
 }
 async function runRelation(toolName, args, input) {
+    const fast = await tryLlm(toolName, args, input);
+    if (fast)
+        return fast;
     const result = await runIx(args);
     if (!result.ok) {
         return wrapErr(toolName, input, {
