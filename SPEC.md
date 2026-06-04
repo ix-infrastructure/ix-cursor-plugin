@@ -240,6 +240,23 @@ Each MCP tool should:
 5. Return stable JSON with `ok`, `tool`, `input`, `summary`, `data`, `evidence`, and `timing_ms`
 6. Normalize failures into a consistent error shape
 
+### `--format llm` fast-path
+
+Single-command read tools that only re-project the response (`ix_subsystems`,
+`ix_stats`, `ix_overview`, `ix_inventory`, `ix_rank`, `ix_locate`, `ix_history`,
+`ix_callers`, `ix_callees`, `ix_imports`, `ix_imported_by`, `ix_depends`,
+`ix_trace`, `ix_text`) take a token-optimized fast-path: when the installed CLI
+is `>= 0.7.0`, they invoke `ix ... --format llm` and forward that compact text
+to the model verbatim (after secret redaction), cutting response tokens ~2-3x.
+The text is **never parsed** — `--format llm` is for model consumption only.
+
+This is strictly additive. The fast-path falls back to the standard
+`--format json` path (step 3 onward, byte-identical to before) on any of:
+older CLI, unknown-format/command error, empty output, or
+`IX_DISABLE_LLM_FORMAT=1`. Tools that derive fields or slice results
+client-side (`ix_impact`, `ix_smells`), commands that route `--format llm` to
+prose/source (`ix_explain`, `ix_read`), and all hooks keep `--format json`.
+
 ### Example output
 
 ```json

@@ -27,7 +27,22 @@ export interface ToolResultErr {
   };
 }
 
-export type ToolResult = ToolResultOk | ToolResultErr;
+// Verbatim token-optimized text passthrough (ix `--format llm`). The model
+// reads `text` directly; it is intentionally NOT a structured JSON envelope.
+export interface ToolResultText {
+  ok: true;
+  tool: string;
+  input: Record<string, unknown>;
+  format: "llm";
+  text: string;
+  timing_ms?: number;
+}
+
+export type ToolResult = ToolResultOk | ToolResultErr | ToolResultText;
+
+export function isTextResult(result: ToolResult): result is ToolResultText {
+  return result.ok && "format" in result && result.format === "llm";
+}
 
 export class ParseError extends Error {
   constructor(message: string) {
@@ -58,6 +73,17 @@ export function wrapErr(
   err: { code: string; message: string },
 ): ToolResult {
   return { ok: false, tool, input, error: { code: err.code, message: err.message } };
+}
+
+export function wrapText(
+  tool: string,
+  input: Record<string, unknown>,
+  text: string,
+  durationMs?: number,
+): ToolResultText {
+  const result: ToolResultText = { ok: true, tool, input, format: "llm", text };
+  if (durationMs !== undefined) result.timing_ms = durationMs;
+  return result;
 }
 
 // ── JSON parser ───────────────────────────────────────────────────────────────

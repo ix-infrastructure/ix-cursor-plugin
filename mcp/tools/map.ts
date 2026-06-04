@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { runIx } from "../lib/cli.js";
+import { tryLlm } from "../lib/llm.js";
 import { parseIxJson, type ToolResult, wrapErr, wrapOk } from "../lib/parser.js";
 import { registerIxTool, type ToolInput } from "./base.js";
 
@@ -122,7 +123,12 @@ async function runMap(input: MapInput): Promise<ToolResult> {
 }
 
 async function runOverview(input: OverviewInput): Promise<ToolResult> {
-  const result = await runIx(["overview", input.target]);
+  const args = ["overview", input.target];
+
+  const fast = await tryLlm(OVERVIEW_TOOL, args, input);
+  if (fast) return fast;
+
+  const result = await runIx(args);
   if (!result.ok) {
     return wrapErr(OVERVIEW_TOOL, input, {
       code: "IX_OVERVIEW_FAILED",

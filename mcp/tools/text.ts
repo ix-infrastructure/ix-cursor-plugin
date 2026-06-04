@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { runIx } from "../lib/cli.js";
+import { tryLlm } from "../lib/llm.js";
 import { parseIxJson, type ToolResult, wrapErr, wrapOk } from "../lib/parser.js";
 import { registerIxTool, type ToolInput } from "./base.js";
 
@@ -45,6 +46,9 @@ async function runText(input: TextInput): Promise<ToolResult> {
   if (input.language) {
     args.push("--language", input.language);
   }
+
+  const fast = await tryLlm(TOOL_NAME, args, { ...input, limit });
+  if (fast) return fast;
 
   const result = await runIx(args);
   if (!result.ok) {
