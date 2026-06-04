@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { runIx } from "../lib/cli.js";
+import { tryLlm } from "../lib/llm.js";
 import { parseIxJson, wrapErr, wrapOk } from "../lib/parser.js";
 import { registerIxTool } from "./base.js";
 const DECISIONS_TOOL = "ix_decisions";
@@ -50,7 +51,11 @@ async function runDecisions(input) {
         : `Found ${normalized.length} architecture decision${normalized.length === 1 ? "" : "s"}`, undefined, result.durationMs);
 }
 async function runHistory(input) {
-    const result = await runIx(["history", input.target]);
+    const args = ["history", input.target];
+    const fast = await tryLlm(HISTORY_TOOL, args, input);
+    if (fast)
+        return fast;
+    const result = await runIx(args);
     if (!result.ok) {
         return wrapErr(HISTORY_TOOL, input, {
             code: "IX_HISTORY_FAILED",
