@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const TEST_DIR = resolve(fileURLToPath(import.meta.url), "..");
 const MOCK_IX_PATH = resolve(TEST_DIR, "../fixtures/bin/ix");
 const LLM_FIXTURE = resolve(TEST_DIR, "../fixtures/ix_outputs/subsystems.llm.txt");
+const ERROR_LLM_FIXTURE = resolve(TEST_DIR, "../fixtures/ix_outputs/error.llm.txt");
 
 // Must be set before the tools (and lib/config) are imported.
 process.env["IX_BIN"] = MOCK_IX_PATH;
@@ -66,6 +67,20 @@ test("fallback: ix < 0.7.0 ignores --format llm and returns the JSON envelope un
   assert.equal(parsed.ok, true);
   assert.equal(parsed.tool, "ix_subsystems");
   assert.ok(parsed.data, "JSON envelope retains structured data on the fallback path");
+});
+
+test("error line: an `error code=` llm response (exit 0) falls back to the JSON path", async () => {
+  const { resetLlmSupportCache } = await import("../../lib/llm.js");
+  process.env["IX_MOCK_VERSION"] = "0.7.0";
+  process.env["IX_MOCK_LLM_FILE"] = ERROR_LLM_FIXTURE; // ix prints an error line on stdout, exit 0
+  delete process.env["IX_DISABLE_LLM_FORMAT"];
+  resetLlmSupportCache();
+
+  const content = await callSubsystems();
+  // Must NOT forward the raw error line; must produce the structured JSON envelope.
+  const parsed = JSON.parse(content.text) as { ok: boolean; tool: string };
+  assert.equal(parsed.tool, "ix_subsystems");
+  assert.ok(!content.text.startsWith("error code="), "error line must not be forwarded as success text");
 });
 
 test("kill switch: IX_DISABLE_LLM_FORMAT forces the JSON path even on a new CLI", async () => {

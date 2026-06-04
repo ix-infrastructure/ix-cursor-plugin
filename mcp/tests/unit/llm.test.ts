@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   gte,
+  isLlmErrorLine,
   ixSupportsLlm,
   MIN_LLM_VERSION,
   parseSemver,
@@ -75,6 +76,24 @@ test("wrapText / isTextResult discriminate correctly", () => {
 
   const okResult = wrapOk("ix_stats", {}, { total: 1 }, "ok");
   assert.equal(isTextResult(okResult), false);
+});
+
+test("isLlmErrorLine detects ix error responses (which ship on stdout w/ exit 0)", () => {
+  // Real error lines captured from a live backend.
+  assert.equal(isLlmErrorLine('error code=unresolved_target message="No entity resolved for \\"x\\"."'), true);
+  assert.equal(isLlmErrorLine('error code=ambiguous_target message="Ambiguous symbol \\"runIx\\"." candidates=1:runIx,2:runIx'), true);
+  assert.equal(isLlmErrorLine("  error code=backend_error message=\"fetch failed\""), true);
+  // Real success headers must NOT be misread as errors.
+  for (const header of [
+    "nodes total=2221 function=304 file=115",
+    "subsystems count=2",
+    "inventory kind=function total=50",
+    "callers target=foo count=3",
+    "impact target=verify_token kind=function risk=high",
+    "region id=cli kind=subsystem label=Client",
+  ]) {
+    assert.equal(isLlmErrorLine(header), false, `false positive on: ${header}`);
+  }
 });
 
 test("ixSupportsLlm honors the IX_DISABLE_LLM_FORMAT kill switch", async () => {

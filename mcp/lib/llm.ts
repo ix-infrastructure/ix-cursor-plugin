@@ -81,6 +81,17 @@ export function redactLlmText(text: string): string {
   return redactSecrets(text);
 }
 
+// ix emits errors as a verbatim `error code=<slug> message="..."` line on stdout
+// AND exits 0 (verified live: unresolved_target, ambiguous_target). Without this
+// check tryLlm would forward that error line as a successful text result.
+// Detecting it lets tryLlm defer to the JSON path, so error handling stays
+// byte-identical to the non-llm path (a structured {ok:false} envelope). No
+// success record for the migrated read commands begins with `error code=`, so
+// this never swallows real data.
+export function isLlmErrorLine(text: string): boolean {
+  return /^error code=/.test(text.trimStart());
+}
+
 // Attempt the llm fast-path for a single-command read tool. Returns a verbatim
 // text result on success, or null to signal "use the JSON fallback".
 export async function tryLlm(
@@ -105,6 +116,10 @@ export async function tryLlm(
 
   const text = redactLlmText(result.stdout).trim();
   if (!text) return null;
+
+  // ix signals errors via an `error code=` line on stdout with exit 0; defer
+  // those to the JSON path so the error contract is unchanged.
+  if (isLlmErrorLine(text)) return null;
 
   return wrapText(toolName, input, text, result.durationMs);
 }
