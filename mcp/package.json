@@ -1,6 +1,6 @@
 {
   "name": "@ix/cursor-plugin-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server for ix-cursor-plugin",
   "type": "module",
   "main": "./dist/server.js",
@@ -8,7 +8,8 @@
     "build": "tsc",
     "dev": "tsx server.ts",
     "start": "node dist/server.js",
-    "test": "tsx --test tests/integration/**/*.test.ts",
+    "test": "tsx --test tests/**/*.test.ts",
+    "test:unit": "tsx --test tests/unit/**/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

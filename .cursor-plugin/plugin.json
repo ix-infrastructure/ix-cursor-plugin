@@ -1,7 +1,7 @@
 {
   "name": "ix-memory",
   "displayName": "Ix Memory",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Graph-first Cursor plugin for Ix-backed code understanding and safe repository workflows.",
   "author": {
     "name": "Ix"
