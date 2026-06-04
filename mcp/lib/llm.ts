@@ -13,7 +13,7 @@
 //   - `IX_DISABLE_LLM_FORMAT=1` forces the JSON path everywhere (kill switch).
 
 import { runIx, runIxLlm } from "./cli.js";
-import { TIMEOUT_HEALTH_MS } from "./config.js";
+import { TIMEOUT_DEFAULT_MS } from "./config.js";
 import { type ToolResult, wrapText } from "./parser.js";
 import { redactSecrets } from "../shared/secrets.js";
 
@@ -41,7 +41,12 @@ function llmDisabled(): boolean {
 }
 
 async function detectIxVersion(): Promise<string> {
-  const result = await runIx(["--version"], { timeout: TIMEOUT_HEALTH_MS });
+  // Generous timeout: `ix` runs a non-awaited update check that delays process
+  // exit (observed ~7-8s on a cold cache), and execFile resolves on exit. A
+  // tight timeout here would spuriously fail the probe and silently disable the
+  // fast-path. This runs once per process (memoized), so the cost is paid at
+  // most once; on timeout it fails closed to the JSON path.
+  const result = await runIx(["--version"], { timeout: TIMEOUT_DEFAULT_MS });
   if (!result.ok) return "unknown";
   const trimmed = result.stdout.trim();
   try {
