@@ -17,6 +17,18 @@ log_call() {
 
 log_call "$@"
 
+# llm-format passthrough: when `--format llm` is requested and a fixture is
+# configured, emit it verbatim regardless of subcommand (drives the
+# llm-passthrough tests). Leaves default JSON behavior untouched when unset.
+if [ -n "${IX_MOCK_LLM_FILE:-}" ]; then
+  for arg in "$@"; do
+    if [ "${arg}" = "llm" ]; then
+      cat "${IX_MOCK_LLM_FILE}"
+      exit 0
+    fi
+  done
+fi
+
 case "${SUBCOMMAND}" in
   briefing)
     cat "${IX_MOCK_BRIEFING_FILE:-${FIXTURES_DIR}/briefing.json}"
@@ -39,7 +51,7 @@ case "${SUBCOMMAND}" in
     exit 0
     ;;
   --version)
-    printf '{"ok":true,"version":"0.0.0-test"}\n'
+    printf '{"ok":true,"version":"%s"}\n' "${IX_MOCK_VERSION:-0.0.0-test}"
     ;;
   *)
     printf 'mock ix: unknown subcommand %s\n' "${SUBCOMMAND}" >&2

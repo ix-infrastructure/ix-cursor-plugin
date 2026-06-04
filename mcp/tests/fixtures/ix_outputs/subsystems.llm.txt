@@ -1,0 +1,3 @@
+subsystems count=2
+region id=cli-client label="Cli / Client" kind=subsystem level=2 files=87 health=0.62 token=ghp_abcdefghijklmnopqrstuvwxyz0123456789
+region id=ingestion label="Ingestion / Parsers" kind=subsystem level=2 files=212 health=0.71
