@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { runIx } from "../lib/cli.js";
+import { tryLlm } from "../lib/llm.js";
 import { parseIxJson, type ToolResult, wrapErr, wrapOk } from "../lib/parser.js";
 import { registerIxTool, type ToolInput } from "./base.js";
 
@@ -52,6 +53,9 @@ export function register(server: McpServer): void {
 async function runDepends(input: DependsInput): Promise<ToolResult> {
   const depth = input.depth ?? DEFAULT_DEPTH;
   const args = ["depends", input.symbol, "--depth", String(depth)];
+
+  const fast = await tryLlm(TOOL_NAME, args, { ...input, depth });
+  if (fast) return fast;
 
   const result = await runIx(args);
   if (!result.ok) {

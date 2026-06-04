@@ -6,7 +6,7 @@ import type {
 import { z } from "zod";
 
 import { captureError, IxError } from "../lib/errors.js";
-import { ParseError, type ToolResult, wrapErr } from "../lib/parser.js";
+import { isTextResult, ParseError, type ToolResult, wrapErr } from "../lib/parser.js";
 
 type ToolSchema = ZodRawShapeCompat;
 
@@ -79,11 +79,15 @@ export function registerIxTool<TSchema extends ToolSchema>(
 }
 
 function jsonTextResponse(result: ToolResult): JsonTextResponse {
+  // llm-format results are forwarded verbatim so the model reads the compact
+  // text directly. Wrapping them in the JSON envelope would re-escape newlines
+  // and erase the token savings, so they bypass JSON.stringify.
+  const text = isTextResult(result) ? result.text : JSON.stringify(result);
   return {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify(result),
+        text,
       },
     ],
   };

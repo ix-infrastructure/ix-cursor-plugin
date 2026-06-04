@@ -1,0 +1,6 @@
+# Executable shell scripts must stay LF so they run on Linux/CI even when the
+# repo is checked out on Windows (autocrlf would otherwise CRLF the shebang and
+# break the script). The mock `ix` used by the MCP integration tests is the
+# critical one.
+mcp/tests/fixtures/bin/ix text eol=lf
+*.sh text eol=lf
