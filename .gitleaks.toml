@@ -1,0 +1,15 @@
+# gitleaks configuration for ix-cursor-plugin.
+#
+# Extends the upstream default ruleset and records the one accepted exception:
+# the MCP secret-redaction unit test deliberately embeds secret-shaped strings
+# (fake GitHub/OpenAI/AWS/GCP keys) to prove the redactor strips them. gitleaks
+# flags the fake `gcp-api-key` there; allowlist those test paths only.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Redaction unit-test fixtures contain intentional fake secrets"
+paths = [
+  '''mcp/tests/unit/llm\.test\.ts''',
+  '''mcp/dist/tests/unit/llm\.test\.js''',
+]
