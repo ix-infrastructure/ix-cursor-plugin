@@ -23,6 +23,35 @@ if (-not (Get-Command "ix" -ErrorAction SilentlyContinue)) {
   throw "'ix' is not available on PATH. Install ix first, then rerun this installer."
 }
 
+# mcp.json points Cursor straight at `ix mcp`, which only exists from 0.9.3. On
+# an older CLI the registration is accepted and then fails at spawn with
+# "unknown command 'mcp'", which Cursor surfaces as a generic connection
+# failure. Refuse here, where there is somewhere to print the reason.
+$MinIxVersion = [version]"0.9.3"
+
+# try/catch, not a bare call: $ErrorActionPreference is Stop, and from
+# PowerShell 7.4 $PSNativeCommandUseErrorActionPreference makes a non-zero exit
+# from a native command a terminating error. A broken `ix` — the exact case the
+# warning below exists for — would otherwise abort with a native-command error
+# instead of the message that says what is wrong.
+$IxVersionRaw = ""
+try {
+  $IxVersionRaw = (& ix --version 2>$null | Out-String)
+} catch {
+  $IxVersionRaw = ""
+}
+
+$IxVersionMatch = [regex]::Match($IxVersionRaw, '\d+\.\d+\.\d+')
+
+if (-not $IxVersionMatch.Success) {
+  # Unreadable is not the same as too old — do not block an install that may work.
+  Write-Warning "Could not read the ix version; $PluginName needs ix >= $MinIxVersion."
+} elseif ([version]$IxVersionMatch.Value -lt $MinIxVersion) {
+  throw ("$PluginName needs ix >= $MinIxVersion, found " + $IxVersionMatch.Value + ". " +
+    "This plugin serves its tools from the CLI's own MCP server ('ix mcp'), which older " +
+    "versions do not have. Run 'ix upgrade', then rerun this installer.")
+}
+
 $TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("ix-cursor-plugin-" + [System.Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $TempDir | Out-Null
 
