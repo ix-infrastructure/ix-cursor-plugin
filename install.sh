@@ -70,22 +70,22 @@ cp -R "${EXTRACTED_DIR}/." "${DEST_DIR}/"
 
 if [[ ! -d "${DEST_DIR}/mcp/node_modules" ]]; then
   if ! command -v npm >/dev/null 2>&1; then
-    echo "Error: npm is required because mcp/node_modules is missing." >&2
+    echo "Error: npm is required because mcp/node_modules is missing (the hooks are built from mcp/)." >&2
     exit 1
   fi
-  echo "Installing MCP runtime dependencies..."
+  echo "Installing hook build dependencies..."
   (
     cd "${DEST_DIR}/mcp"
     npm ci --omit=dev
   )
 fi
 
-if [[ ! -f "${DEST_DIR}/mcp/dist/server.js" ]]; then
+if [[ ! -f "${DEST_DIR}/mcp/dist/hooks/prompt-briefing.js" ]]; then
   if ! command -v npm >/dev/null 2>&1; then
-    echo "Error: npm is required because mcp/dist/server.js is missing." >&2
+    echo "Error: npm is required because mcp/dist/hooks are missing." >&2
     exit 1
   fi
-  echo "Building MCP server..."
+  echo "Building hooks..."
   (
     cd "${DEST_DIR}/mcp"
     npm ci

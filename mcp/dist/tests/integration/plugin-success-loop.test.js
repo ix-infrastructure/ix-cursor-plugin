@@ -104,14 +104,14 @@ async function invokeSubsystemsTool(env) {
         process.env[key] = value;
     }
     try {
-        const mod = await import(new URL("../../tools/subsystems.ts", import.meta.url).href);
-        const server = new FakeServer();
-        mod.register(server);
-        const callback = server.callbacks.get("ix_subsystems");
-        assert.ok(callback, "ix_subsystems should be registered");
-        const response = await callback({}, {});
-        assert.equal(response.content[0]?.type, "text");
-        return JSON.parse(response.content[0].text);
+        // Reads the graph through lib/cli, the layer the hooks use. This used to go
+        // through tools/subsystems; the CLI's own `ix mcp` serves those tools now,
+        // so what is left to prove here is that the hook loop's writes are visible
+        // to a subsequent read, not how a tool wrapper shaped its envelope.
+        const { runIx } = await import("../../lib/cli.js");
+        const result = await runIx(["subsystems"]);
+        assert.ok(result.ok, `ix subsystems failed: ${result.stderr}`);
+        return JSON.parse(result.stdout);
     }
     finally {
         for (const [key, value] of previousValues.entries()) {
@@ -140,10 +140,8 @@ test("prompt briefing injects context and subsystem tool returns structured data
     assert.match(hookJson.additional_context ?? "", /Ship Cursor plugin integration tests/);
     await waitForLogLine(logPath, "briefing --format json");
     const toolResult = await invokeSubsystemsTool(env);
-    assert.equal(toolResult.ok, true, JSON.stringify(toolResult.error));
-    assert.equal(toolResult.tool, "ix_subsystems");
-    assert.equal(toolResult.data?.graph?.map_rev, 101);
-    assert.deepEqual(toolResult.data?.subsystems?.map((subsystem) => subsystem.name), ["Hooks", "Tools"]);
+    assert.equal(toolResult.map_rev, 101);
+    assert.deepEqual(toolResult.regions?.map((region) => region.label), ["Hooks", "Tools"]);
     const logLines = await readLogLines(logPath);
     assert.ok(logLines.some((line) => line.includes("subsystems --format json")));
 });
@@ -175,7 +173,7 @@ test("post-edit ingest triggers async map and follow-up subsystem query reflects
     const statePath = requiredEnv(env, "IX_MOCK_STATE_FILE");
     const logPath = requiredEnv(env, "IX_MOCK_LOG_FILE");
     const before = await invokeSubsystemsTool(env);
-    assert.equal(before.data?.graph?.map_rev, 101);
+    assert.equal(before.map_rev, 101);
     const hookResult = await runHook("hooks/post-edit-ingest.ts", {
         file_path: "/repo/src/new-test.ts",
         workspace_roots: ["/repo"],
@@ -185,8 +183,7 @@ test("post-edit ingest triggers async map and follow-up subsystem query reflects
     await waitForFile(statePath);
     await waitForLogLine(logPath, "map src/new-test.ts");
     const after = await invokeSubsystemsTool(env);
-    assert.equal(after.ok, true, JSON.stringify(after.error));
-    assert.equal(after.data?.graph?.map_rev, 102);
-    assert.deepEqual(after.data?.subsystems?.map((subsystem) => subsystem.name), ["Hooks", "Tools", "Tests"]);
+    assert.equal(after.map_rev, 102);
+    assert.deepEqual(after.regions?.map((region) => region.label), ["Hooks", "Tools", "Tests"]);
 });
 //# sourceMappingURL=plugin-success-loop.test.js.map

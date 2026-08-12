@@ -20,9 +20,9 @@ It is intended for graph-first code understanding and safer repository workflows
 - Cursor desktop installed
 - Node.js 18 or newer
 - `ix` available on your `PATH`
-- Built JS artifacts present under `mcp/dist/`
+- Built hook artifacts present under `mcp/dist/hooks/`
 
-If `mcp/dist/` is missing, build it first:
+If `mcp/dist/hooks/` is missing, build it first:
 
 ```bash
 cd ix-cursor-plugin/mcp
@@ -120,7 +120,8 @@ If the plugin is loaded correctly, Cursor should use `ix_*` tools instead of rep
 - If Cursor does not see the plugin, confirm `~/.cursor/plugins/local/ix-memory` exists and points to this directory.
 - If skills are unknown, restart Cursor after installing the plugin.
 - If tool calls fail, confirm `ix` is installed and available on your shell `PATH`.
-- If hooks or MCP tools fail with missing files, rebuild `mcp/dist/`.
+- If hooks fail with missing files, rebuild `mcp/dist/`.
+- MCP tools are served by the Ix CLI (`ix mcp`); check them with `ix mcp doctor`.
 - If the target install path already exists as a real directory, move or remove it before re-running `install-local.sh`.
 
 ## Data Handling

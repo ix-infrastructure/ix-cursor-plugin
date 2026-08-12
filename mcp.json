@@ -2,13 +2,8 @@
   "mcpServers": {
     "ix-memory": {
       "type": "stdio",
-      "command": "node",
-      "args": [
-        "./mcp/dist/server.js"
-      ],
-      "env": {
-        "IX_BIN": "ix"
-      }
+      "command": "ix",
+      "args": ["mcp"]
     }
   }
 }
