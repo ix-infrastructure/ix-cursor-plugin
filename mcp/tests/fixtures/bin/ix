@@ -42,6 +42,10 @@ case "${SUBCOMMAND}" in
     ;;
   impact)
     cat "${IX_MOCK_IMPACT_FILE:-${FIXTURES_DIR}/impact_high.json}"
+    # Real ix exits non-zero for a refusal while still printing its JSON body
+    # (ix-infrastructure/Ix#547). Scoped to impact so the health probe and the
+    # other subcommands keep their own exit status.
+    exit "${IX_MOCK_IMPACT_EXIT:-0}"
     ;;
   map)
     if [ -n "${IX_MOCK_STATE_FILE:-}" ]; then
