@@ -108,7 +108,7 @@ async function main() {
     let locateConfidence = 1.0;
     let locateRaw = null;
     const locateResult = results["locate"];
-    if (locateResult?.ok && locateResult.stdout) {
+    if (locateResult?.stdout) {
         try {
             locateRaw = parseIxJson(locateResult.stdout);
             const summary = summarizeLocate(locateRaw);
@@ -123,7 +123,7 @@ async function main() {
     let textPart = "";
     let textRaw = null;
     const textResult = results["text"];
-    if (textResult?.ok && textResult.stdout) {
+    if (textResult?.stdout) {
         try {
             textRaw = parseIxJson(textResult.stdout);
             const hits = Array.isArray(textRaw) ? textRaw : [];

@@ -71,7 +71,13 @@ async function main() {
     const filename = basename(filePath);
     // Call ix impact (9 s budget; hook timeout is 10 s)
     const result = await runIx(["impact", relPath], { timeout: 9_000 });
-    if (!result.ok)
+    // Not `!result.ok`. A non-zero exit is not the same as no answer: `runIx`
+    // keeps stdout across a failure, and since ix-infrastructure/Ix#547 a target
+    // that is not in the graph exits 1 while still printing its JSON body. Gating
+    // on the exit code alone conflated "ix could not run" with "ix ran and had
+    // nothing to say", and threw the body away in both cases. Bail only when
+    // there is genuinely nothing to read — a missing binary, a timeout, a crash.
+    if (!result.stdout.trim())
         process.exit(0);
     let raw;
     try {
