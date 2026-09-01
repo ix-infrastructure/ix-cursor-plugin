@@ -3,19 +3,13 @@
   "version": "0.2.1",
   "description": "MCP server for ix-cursor-plugin",
   "type": "module",
-  "main": "./dist/server.js",
   "scripts": {
     "build": "tsc",
-    "dev": "tsx server.ts",
-    "start": "node dist/server.js",
     "test": "tsx --test tests/**/*.test.ts",
     "test:unit": "tsx --test tests/unit/**/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "zod": "^3.25.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^22.0.0",
     "tsx": "^4.22.4",

@@ -21,20 +21,17 @@ interface HookResult {
   stderr: string;
 }
 
+/**
+ * `ix subsystems --format json` as the CLI emits it.
+ *
+ * Previously this was the envelope tools/subsystems.ts built around that output
+ * — `{ok, tool, data:{subsystems, graph}}`. The tool layer moved into the CLI's
+ * own `ix mcp`, so the hook loop is now checked against what `ix` actually
+ * returns.
+ */
 interface ToolResponse {
-  ok: boolean;
-  tool: string;
-  summary?: string;
-  data?: {
-    subsystems?: Array<{ name?: string }>;
-    graph?: {
-      map_rev?: number;
-    };
-  };
-  error?: {
-    code: string;
-    message: string;
-  };
+  map_rev?: number;
+  regions?: Array<{ label?: string }>;
 }
 
 type ToolCallback = (rawInput: unknown, extra: unknown) => Promise<{
@@ -159,17 +156,15 @@ async function invokeSubsystemsTool(env: Record<string, string>): Promise<ToolRe
   }
 
   try {
-    const mod = await import(new URL("../../tools/subsystems.ts", import.meta.url).href);
-    const server = new FakeServer();
-    mod.register(server as never);
+    // Reads the graph through lib/cli, the layer the hooks use. This used to go
+    // through tools/subsystems; the CLI's own `ix mcp` serves those tools now,
+    // so what is left to prove here is that the hook loop's writes are visible
+    // to a subsequent read, not how a tool wrapper shaped its envelope.
+    const { runIx } = await import("../../lib/cli.js");
+    const result = await runIx(["subsystems"]);
+    assert.ok(result.ok, `ix subsystems failed: ${result.stderr}`);
 
-    const callback = server.callbacks.get("ix_subsystems");
-    assert.ok(callback, "ix_subsystems should be registered");
-
-    const response = await callback({}, {});
-    assert.equal(response.content[0]?.type, "text");
-
-    return JSON.parse(response.content[0]!.text) as ToolResponse;
+    return JSON.parse(result.stdout) as ToolResponse;
   } finally {
     for (const [key, value] of previousValues.entries()) {
       if (value === undefined) {
@@ -211,11 +206,9 @@ test("prompt briefing injects context and subsystem tool returns structured data
   await waitForLogLine(logPath, "briefing --format json");
 
   const toolResult = await invokeSubsystemsTool(env);
-  assert.equal(toolResult.ok, true, JSON.stringify(toolResult.error));
-  assert.equal(toolResult.tool, "ix_subsystems");
-  assert.equal(toolResult.data?.graph?.map_rev, 101);
+  assert.equal(toolResult.map_rev, 101);
   assert.deepEqual(
-    toolResult.data?.subsystems?.map((subsystem) => subsystem.name),
+    toolResult.regions?.map((region) => region.label),
     ["Hooks", "Tools"],
   );
 
@@ -318,7 +311,7 @@ test("post-edit ingest triggers async map and follow-up subsystem query reflects
   const logPath = requiredEnv(env, "IX_MOCK_LOG_FILE");
 
   const before = await invokeSubsystemsTool(env);
-  assert.equal(before.data?.graph?.map_rev, 101);
+  assert.equal(before.map_rev, 101);
 
   const hookResult = await runHook(
     "hooks/post-edit-ingest.ts",
@@ -336,10 +329,9 @@ test("post-edit ingest triggers async map and follow-up subsystem query reflects
   await waitForLogLine(logPath, "map src/new-test.ts");
 
   const after = await invokeSubsystemsTool(env);
-  assert.equal(after.ok, true, JSON.stringify(after.error));
-  assert.equal(after.data?.graph?.map_rev, 102);
+  assert.equal(after.map_rev, 102);
   assert.deepEqual(
-    after.data?.subsystems?.map((subsystem) => subsystem.name),
+    after.regions?.map((region) => region.label),
     ["Hooks", "Tools", "Tests"],
   );
 });
