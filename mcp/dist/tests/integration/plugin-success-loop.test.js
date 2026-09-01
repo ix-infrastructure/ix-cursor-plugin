@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -163,6 +163,39 @@ test("pre-edit hook warns for high-risk file edits", { concurrency: false }, asy
     assert.match(output.agent_message ?? "", /HIGH-RISK EDIT/);
     assert.match(output.agent_message ?? "", /shared\.ts has 5 dependents/);
     await waitForLogLine(requiredEnv(env, "IX_MOCK_LOG_FILE"), "impact src/shared.ts --format json");
+});
+/**
+ * `runIx` keeps stdout when ix exits non-zero, but this hook used to discard it
+ * on `!result.ok` — so a body that arrived with a failing exit status was
+ * thrown away. Since ix-infrastructure/Ix#547 that is the normal shape of a
+ * refusal, and Ix#539 asks the plugins to tolerate it before the CLI starts
+ * producing it.
+ */
+test("pre-edit hook still warns when ix exits non-zero with a usable body", { concurrency: false }, async (t) => {
+    const tempDir = await mkdtemp(join(tmpdir(), "ix-cursor-itest-"));
+    t.after(async () => {
+        await rm(tempDir, { recursive: true, force: true });
+    });
+    const env = fixtureEnv(tempDir, { IX_MOCK_IMPACT_EXIT: "1" });
+    const result = await runHook("hooks/pre-edit.ts", { tool_name: "Edit", tool_input: { file_path: "/repo/src/shared.ts" }, cwd: "/repo" }, env);
+    assert.equal(result.code, 0, result.stderr);
+    assert.ok(result.stdout, "a non-zero exit must not discard the impact body");
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.permission, "allow");
+    assert.match(output.agent_message ?? "", /HIGH-RISK EDIT/);
+});
+/** The other half: a refusal body carries no risk, so the hook stays quiet. */
+test("pre-edit hook stays silent when ix refuses the target", { concurrency: false }, async (t) => {
+    const tempDir = await mkdtemp(join(tmpdir(), "ix-cursor-itest-"));
+    t.after(async () => {
+        await rm(tempDir, { recursive: true, force: true });
+    });
+    const refusal = join(tempDir, "unresolved.json");
+    await writeFile(refusal, JSON.stringify({ error: "unresolved_target", message: 'No entity found matching "shared.ts".' }));
+    const env = fixtureEnv(tempDir, { IX_MOCK_IMPACT_EXIT: "1", IX_MOCK_IMPACT_FILE: refusal });
+    const result = await runHook("hooks/pre-edit.ts", { tool_name: "Edit", tool_input: { file_path: "/repo/src/shared.ts" }, cwd: "/repo" }, env);
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.stdout.trim(), "", "a refusal is not a risk warning");
 });
 test("post-edit ingest triggers async map and follow-up subsystem query reflects updated graph state", { concurrency: false }, async (t) => {
     const tempDir = await mkdtemp(join(tmpdir(), "ix-cursor-itest-"));

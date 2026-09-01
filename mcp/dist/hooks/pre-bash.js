@@ -98,7 +98,7 @@ async function main() {
     let locatePart = "";
     let locateRaw = null;
     const locateResult = results["locate"];
-    if (locateResult?.ok && locateResult.stdout) {
+    if (locateResult?.stdout) {
         try {
             locateRaw = parseIxJson(locateResult.stdout);
             const s = summarizeLocate(locateRaw);
@@ -110,7 +110,7 @@ async function main() {
     let textPart = "";
     let textRaw = null;
     const textResult = results["text"];
-    if (textResult?.ok && textResult.stdout) {
+    if (textResult?.stdout) {
         try {
             textRaw = parseIxJson(textResult.stdout);
             textPart = summarizeText(Array.isArray(textRaw) ? textRaw : []);

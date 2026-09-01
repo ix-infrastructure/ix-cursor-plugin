@@ -117,6 +117,10 @@ async function main(): Promise<void> {
 
   const cache = await withCache("briefing", BRIEFING_TTL_MS, async () => {
     const result = await runIx(["briefing"], { timeout: 9_000 });
+    // Left gating on the exit code, unlike the other hooks: `briefing` is a Pro
+    // command, so on an OSS install the failure IS the answer and there is no
+    // body worth reading. Throwing here is what keeps the briefing out of the
+    // cache and the hook silent.
     if (!result.ok) {
       throw new Error(result.stderr || "ix briefing failed");
     }
