@@ -122,8 +122,18 @@ jobs:
       # minor that changes emit would go green while every user keeps running
       # the old build. Rebuilding is byte-identical today, so this passes now
       # and bites later, which is the point.
+      # `git status --porcelain`, not `git diff --exit-code`: git diff never
+      # reports UNTRACKED paths, and the likeliest drift is exactly that --
+      # add mcp/hooks/foo.ts, commit the .ts, forget the four emitted files,
+      # and tsc writes them as untracked while `git diff` exits 0. The gate
+      # would be green with the hook missing from every install.
       - name: Committed dist matches the build
-        run: git diff --exit-code -- dist
+        run: |
+          if [ -n "$(git status --porcelain -- dist)" ]; then
+            echo "mcp/dist differs from a clean build:"
+            git status --porcelain -- dist
+            exit 1
+          fi
         working-directory: mcp
 
   # ── Aggregate gate ───────────────────────────────────────────────────────
