@@ -1,8 +1,5 @@
 version: 2
 updates:
-  # This repo ships markdown + JSON manifests + shell install scripts and has no
-  # application package manager, so the only ecosystem to keep current is the
-  # pinned GitHub Actions in .github/workflows.
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -10,3 +7,48 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  # mcp/ IS an application package manager -- package.json, tsconfig.json, a
+  # tsc build, a tsx test suite -- and it has never been covered here.
+  #
+  # Two SEPARATE problems, only one of which has a culprit:
+  #
+  #  - The lock was left stale. #24 (6f271b8) emptied `dependencies` in
+  #    mcp/package.json when the MCP server moved to serving tools from the Ix
+  #    CLI, but did not regenerate mcp/package-lock.json, so the lock kept the
+  #    whole removed server tree (express, qs, ajv, fast-uri,
+  #    @modelcontextprotocol/sdk, zod). `npm ci` resolves from package.json and
+  #    ignores that stale root entry, so the INSTALLED tree stayed clean -- but
+  #    the dependency graph is read from the lock, so Dependabot raised 5 alerts
+  #    (4x fast-uri, 1x qs) for packages nothing installs, and its
+  #    security-update job then failed on every attempt because there was no
+  #    manifest entry to update: Actions runs 33713867821, 33729414309,
+  #    33732117192, 33805356883, 33811119124.
+  #
+  #  - This npm entry was never here to begin with. `git log --all --
+  #    .github/dependabot.yml` returns exactly two commits: #5, which created
+  #    the file with only the github-actions entry, and the one adding this
+  #    block. Nothing was dropped or regressed -- tsx, typescript and
+  #    @types/node have simply never received version updates. (Security
+  #    updates need no entry, which is why the fast-uri/qs alerts were raised at
+  #    all.)
+  - package-ecosystem: npm
+    directory: /mcp
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    ignore:
+      # Toolchain majors need a deliberate, tested migration, not an auto-bump.
+      # Same policy as ix-openclaw-plugin.
+      #
+      # Scoped to version-updates, NOT a bare ignore: a bare entry would also
+      # suppress security-update PRs for these two.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+    groups:
+      dev-dependencies:
+        dependency-type: development
+      production-dependencies:
+        dependency-type: production
