@@ -58,6 +58,74 @@ jobs:
             -not -path './.git/*' -not -path '*/node_modules/*' -not -path '*/dist/*' -print0)
           exit $fail
 
+  # ── mcp/ build gate ─────────────────────────────────────────────────
+  # Added with the `npm` Dependabot entry for /mcp, deliberately in the same
+  # change. That entry opens a weekly stream of dependency PRs, and without a
+  # job that actually installs and compiles mcp/, every one of them would be
+  # green on shellcheck and a JSON parse while proving nothing.
+  #
+  # This is not hypothetical for this repo: mcp/dist is COMMITTED and nothing
+  # rebuilds it, so a bump that breaks `tsc` would surface only when someone
+  # next runs install.sh's build path. tsx is also what executes the test
+  # suite, and it is not in the ignore list.
+  #
+  # typecheck + build only. `npm test` is deliberately NOT run here: its
+  # integration tests drive a POSIX mock `ix` and are a separate piece of work.
+  mcp:
+    name: mcp build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mcp/package-lock.json
+
+      - name: Install
+        run: npm ci
+        working-directory: mcp
+
+      # `npm ci` does NOT catch the drift that caused this repo's 5 unfixable
+      # Dependabot alerts, so this step exists instead. Measured, not assumed:
+      # replay #24's tree -- package.json with `dependencies: {}` against a lock
+      # whose root still requires @modelcontextprotocol/sdk and zod -- and
+      # `npm ci` exits 0, "added 6 packages", the same 6 a correct lock installs.
+      # It only errors in the OTHER direction, a manifest dep missing from the
+      # lock. Regenerating the lock and diffing is what actually sees it:
+      # against that same replay this exits 1, and against the current tree it
+      # exits 0.
+      #
+      # That drift is invisible at install time and only surfaces in the
+      # dependency graph, as alerts naming packages nothing installs.
+      - name: Lockfile is in sync with package.json
+        run: |
+          npm install --package-lock-only --no-audit --no-fund
+          git diff --exit-code -- package-lock.json
+        working-directory: mcp
+
+      - name: Typecheck
+        run: npm run typecheck
+        working-directory: mcp
+
+      - name: Build
+        run: npm run build
+        working-directory: mcp
+
+      # mcp/dist is COMMITTED -- 68 tracked files -- and install.sh:102 only
+      # rebuilds it when prompt-briefing.js is MISSING, never when it is stale.
+      # So building without comparing the emit leaves the exact gap this job was
+      # added for: typescript majors are ignored here but minors are not, and a
+      # minor that changes emit would go green while every user keeps running
+      # the old build. Rebuilding is byte-identical today, so this passes now
+      # and bites later, which is the point.
+      - name: Committed dist matches the build
+        run: git diff --exit-code -- dist
+        working-directory: mcp
+
   # ── Aggregate gate ───────────────────────────────────────────────────────
   # One stable required-status-check context. Fails if validate failed OR was
   # skipped/cancelled, so the job graph can be reshaped without orphaning the
@@ -65,10 +133,12 @@ jobs:
   ci-success:
     name: CI Passed
     if: always()
-    needs: [validate]
+    needs: [validate, mcp]
     runs-on: ubuntu-latest
     steps:
       - name: Verify all required jobs succeeded
         run: |
           echo "validate=${{ needs.validate.result }}"
+          echo "mcp=${{ needs.mcp.result }}"
           [ "${{ needs.validate.result }}" = "success" ]
+          [ "${{ needs.mcp.result }}" = "success" ]
