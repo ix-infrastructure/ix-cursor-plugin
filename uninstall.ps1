@@ -1,3 +1,5 @@
+# Copyright 2026 Ix Infrastructure Inc.
+
 $ErrorActionPreference = "Stop"
 
 $PluginName = if ($env:IX_CURSOR_PLUGIN_NAME) { $env:IX_CURSOR_PLUGIN_NAME } else { "ix-memory" }

@@ -1,5 +1,7 @@
 # ix-memory for Cursor
 
+[![Sponsor](https://img.shields.io/badge/sponsor-%E2%9D%A4-db61a2)](https://github.com/sponsors/ix-infrastructure)
+
 `ix-memory` is a local Cursor plugin that brings Ix graph tools, skills, rules, and hooks into Cursor.
 
 It is intended for graph-first code understanding and safer repository workflows:

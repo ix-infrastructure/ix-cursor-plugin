@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Copyright 2026 Ix Infrastructure Inc.
 // Cursor preToolUse hook (matcher: "Write") — pre-edit impact warning.
 //
 // Fires before any file write. Calls ix impact on the target file and injects
