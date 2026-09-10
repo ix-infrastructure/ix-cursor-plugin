@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Copyright 2026 Ix Infrastructure INC
+// Copyright 2026 Ix Infrastructure Inc.
 
 // Cursor stop hook — attribution summary after each agent turn.
 //

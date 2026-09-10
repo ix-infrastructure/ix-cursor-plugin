@@ -1,4 +1,4 @@
-// Copyright 2026 Ix Infrastructure INC
+// Copyright 2026 Ix Infrastructure Inc.
 import { stripHeader } from "./cli.js";
 import { containsSecret, redactSecrets } from "../shared/secrets.js";
 export function isTextResult(result) {

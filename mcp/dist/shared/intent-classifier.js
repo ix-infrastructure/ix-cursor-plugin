@@ -1,4 +1,4 @@
-// Copyright 2026 Ix Infrastructure INC
+// Copyright 2026 Ix Infrastructure Inc.
 import { containsSecret } from "./secrets.js";
 // ── Literal indicators ────────────────────────────────────────────────────────
 function isLiteral(p) {

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Copyright 2026 Ix Infrastructure INC
+// Copyright 2026 Ix Infrastructure Inc.
 
 // Cursor beforeSubmitPrompt hook — injects Ix session briefing once per 10 minutes.
 //

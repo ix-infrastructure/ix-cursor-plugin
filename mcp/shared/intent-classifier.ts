@@ -1,4 +1,4 @@
-// Copyright 2026 Ix Infrastructure INC
+// Copyright 2026 Ix Infrastructure Inc.
 
 // Intent classifier — formalizes ix_query_intent() from ix-lib.sh.
 //
