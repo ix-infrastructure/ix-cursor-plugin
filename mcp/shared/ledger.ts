@@ -1,3 +1,5 @@
+// Copyright 2026 Ix Infrastructure INC
+
 // Per-turn attribution ledger (port of hooks/ix-ledger.sh).
 //
 // Hooks append events after each ix invocation. The stop-annotate hook reads

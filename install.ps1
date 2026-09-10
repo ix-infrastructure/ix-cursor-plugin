@@ -1,3 +1,5 @@
+# Copyright 2026 Ix Infrastructure INC
+
 $ErrorActionPreference = "Stop"
 
 $Repo = if ($env:IX_CURSOR_REPO) { $env:IX_CURSOR_REPO } else { "ix-infrastructure/ix-cursor-plugin" }

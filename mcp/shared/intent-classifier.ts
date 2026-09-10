@@ -1,3 +1,5 @@
+// Copyright 2026 Ix Infrastructure INC
+
 // Intent classifier — formalizes ix_query_intent() from ix-lib.sh.
 //
 // Classifies a search pattern as symbol, literal, file, or unknown, and

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright 2026 Ix Infrastructure INC
+
 # install-local.sh — Register the local ix-cursor-plugin as a Cursor local plugin.
 #
 # Usage: ./install-local.sh

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// Copyright 2026 Ix Infrastructure INC
+
 // Cursor stop hook — attribution summary after each agent turn.
 //
 // Reads the current turn's ledger events and emits a one-line summary of how

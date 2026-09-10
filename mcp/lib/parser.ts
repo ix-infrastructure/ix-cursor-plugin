@@ -1,3 +1,5 @@
+// Copyright 2026 Ix Infrastructure INC
+
 import { stripHeader } from "./cli.js";
 import { containsSecret, redactSecrets } from "../shared/secrets.js";
 

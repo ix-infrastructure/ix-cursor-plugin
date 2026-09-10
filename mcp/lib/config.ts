@@ -1,3 +1,5 @@
+// Copyright 2026 Ix Infrastructure INC
+
 // All plugin configuration comes from environment variables.
 // Read once at import time so the values are stable for the process lifetime.
 

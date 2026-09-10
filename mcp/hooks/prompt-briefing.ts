@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// Copyright 2026 Ix Infrastructure INC
+
 // Cursor beforeSubmitPrompt hook — injects Ix session briefing once per 10 minutes.
 //
 // Reads JSON from stdin (prompt payload). Calls ix briefing via the CLI adapter,
