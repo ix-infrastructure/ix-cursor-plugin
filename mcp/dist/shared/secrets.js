@@ -1,3 +1,4 @@
+// Copyright 2026 Ix Infrastructure INC
 const SECRET_PATTERNS = [
     /Bearer\s+[A-Za-z0-9._~+/=-]{20,}/g,
     /gh[pousr]_[A-Za-z0-9]{20,}/g,

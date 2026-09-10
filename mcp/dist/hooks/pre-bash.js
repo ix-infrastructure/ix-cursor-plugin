@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Copyright 2026 Ix Infrastructure INC
 // Cursor beforeShellExecution hook — intercept grep/rg calls in bash commands.
 //
 // Fires before any shell command executes. Detects grep or rg invocations,
