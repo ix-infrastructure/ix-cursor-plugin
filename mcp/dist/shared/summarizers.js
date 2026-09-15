@@ -1,3 +1,4 @@
+// Copyright 2026 Ix Infrastructure Inc.
 function buildSummary(notes) {
     if (notes.length === 0) {
         return "";

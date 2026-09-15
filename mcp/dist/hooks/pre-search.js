@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Copyright 2026 Ix Infrastructure Inc.
 // Cursor preToolUse hook (matcher: "Grep") — graph-first search interception.
 //
 // Fires before Cursor's native Grep tool executes. Classifies the search pattern

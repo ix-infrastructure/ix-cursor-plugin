@@ -1,14 +1,4 @@
-// Intent classifier — formalizes ix_query_intent() from ix-lib.sh.
-//
-// Classifies a search pattern as symbol, literal, file, or unknown, and
-// attaches a confidence score. Used by pre-search and pre-bash hooks.
-//
-// Confidence ranges:
-//   0.9  PascalCase / well-formed file path → very likely correct intent
-//   0.8  camelCase / dotted qualified name
-//   0.75 short snake_case
-//   0.5  ambiguous (short, plain, could be anything)
-//   0.3  command-like string → probably not a code search
+// Copyright 2026 Ix Infrastructure Inc.
 import { containsSecret } from "./secrets.js";
 // ── Literal indicators ────────────────────────────────────────────────────────
 function isLiteral(p) {
