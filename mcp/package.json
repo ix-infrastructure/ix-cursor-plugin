@@ -11,8 +11,8 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "@types/node": "^22.20.2",
-    "tsx": "^4.22.4",
+    "@types/node": "^22.20.4",
+    "tsx": "^4.23.15",
     "typescript": "^5.0.0"
   },
   "engines": {
