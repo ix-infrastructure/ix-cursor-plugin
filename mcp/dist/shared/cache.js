@@ -1,12 +1,13 @@
 // Copyright 2026 Ix Infrastructure Inc.
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { ensureStateDir, stateDir } from "./state-dir.js";
 const memoryCache = new Map();
-const CACHE_DIR = join(tmpdir(), "ix-cursor-cache");
+// Per-user (see state-dir.ts), not a fixed path in the shared tmpdir.
+const CACHE_SUBDIR = "cache";
 function cacheFile(key) {
     const safeKey = key.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
-    return join(CACHE_DIR, `${safeKey}.json`);
+    return join(stateDir(), CACHE_SUBDIR, `${safeKey}.json`);
 }
 async function readDiskEntry(key) {
     try {
@@ -23,8 +24,8 @@ async function readDiskEntry(key) {
 }
 async function writeDiskEntry(key, entry) {
     try {
-        await mkdir(CACHE_DIR, { recursive: true });
-        await writeFile(cacheFile(key), JSON.stringify(entry), "utf8");
+        await ensureStateDir(CACHE_SUBDIR);
+        await writeFile(cacheFile(key), JSON.stringify(entry), { encoding: "utf8", mode: 0o600 });
     }
     catch {
         // non-fatal
