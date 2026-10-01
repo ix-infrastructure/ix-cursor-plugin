@@ -3,7 +3,7 @@
     "ix-memory": {
       "type": "stdio",
       "command": "ix",
-      "args": ["mcp"]
+      "args": ["mcp", "--tools=all"]
     }
   }
 }

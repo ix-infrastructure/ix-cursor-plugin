@@ -25,11 +25,12 @@ if (-not (Get-Command "ix" -ErrorAction SilentlyContinue)) {
   throw "'ix' is not available on PATH. Install ix first, then rerun this installer."
 }
 
-# mcp.json points Cursor straight at `ix mcp`, which only exists from 0.9.3. On
-# an older CLI the registration is accepted and then fails at spawn with
-# "unknown command 'mcp'", which Cursor surfaces as a generic connection
-# failure. Refuse here, where there is somewhere to print the reason.
-$MinIxVersion = [version]"0.9.3"
+# mcp.json points Cursor straight at `ix mcp --tools=all`. `ix mcp` only exists
+# from 0.9.3 and `--tools` from 0.11.0. On an older CLI the registration is
+# accepted and then fails at spawn ("unknown command 'mcp'" or "unknown option
+# '--tools=all'"), which Cursor surfaces as a generic connection failure.
+# Refuse here, where there is somewhere to print the reason.
+$MinIxVersion = [version]"0.11.0"
 
 # try/catch, not a bare call: $ErrorActionPreference is Stop, and from
 # PowerShell 7.4 $PSNativeCommandUseErrorActionPreference makes a non-zero exit
