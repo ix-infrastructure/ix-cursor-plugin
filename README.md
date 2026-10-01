@@ -7,7 +7,7 @@
 It is intended for graph-first code understanding and safer repository workflows:
 
 - Skills such as `/ix-understand`, `/ix-investigate`, and `/ix-impact`
-- MCP tools such as `ix_locate`, `ix_explain`, `ix_callers`, and `ix_briefing`
+- MCP tools such as `ix_locate`, `ix_explain`, `ix_callers`, and (with Ix Pro) `ix_briefing`
 - Subagents such as `ix-system-explorer` and `ix-bug-investigator`, which the skills delegate to
 - Hooks for a session briefing, edit impact warnings, search context, and graph refresh
 
@@ -140,7 +140,10 @@ If the plugin is loaded correctly, Cursor should use `ix_*` tools instead of rep
 - If skills are unknown, restart Cursor after installing the plugin.
 - If tool calls fail, confirm `ix` is installed and available on your shell `PATH`.
 - If hooks fail with missing files, rebuild `mcp/dist/`.
-- MCP tools are served by the Ix CLI (`ix mcp`); check them with `ix mcp doctor`.
+- MCP tools are served by the Ix CLI (`ix mcp --tools=all`, Ix 0.11.0 or later); check them with `ix mcp doctor`.
+  `--tools=all` matters: since Ix 0.12.0 a bare `ix mcp` advertises only five core tools (`ix_context`, `ix_search`,
+  `ix_neighbors`, `ix_impact`, `ix_read`), and the skills here also call `ix_locate`, `ix_explain`, `ix_callers`, `ix_trace` and others.
+  If you registered Ix yourself with `ix mcp install --host cursor`, that entry runs a bare `ix mcp`; remove it or add `--tools=all`.
 - If the target install path already exists as a real directory, move or remove it before re-running `install-local.sh`.
 
 ## Data Handling

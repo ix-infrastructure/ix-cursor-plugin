@@ -30,12 +30,13 @@ if ! command -v ix >/dev/null 2>&1; then
   exit 1
 fi
 
-# mcp.json points Cursor straight at `ix mcp`, which only exists from 0.9.3. On
-# an older CLI the registration is accepted and then fails at spawn with
-# "unknown command 'mcp'" — Cursor surfaces that as a generic connection
-# failure, which says nothing about needing an upgrade. Refuse here instead,
-# where there is somewhere to print the reason.
-MIN_IX_VERSION="0.9.3"
+# mcp.json points Cursor straight at `ix mcp --tools=all`. `ix mcp` only exists
+# from 0.9.3 and `--tools` from 0.11.0. On an older CLI the registration is
+# accepted and then fails at spawn ("unknown command 'mcp'" or "unknown option
+# '--tools=all'") — Cursor surfaces that as a generic connection failure, which
+# says nothing about needing an upgrade. Refuse here instead, where there is
+# somewhere to print the reason.
+MIN_IX_VERSION="0.11.0"
 IX_VERSION="$(ix --version 2>/dev/null | tr -d '\r' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)"
 
 if [[ -z "${IX_VERSION}" ]]; then
