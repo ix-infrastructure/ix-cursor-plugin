@@ -1,30 +1,44 @@
 #!/usr/bin/env node
 // Copyright 2026 Ix Infrastructure Inc.
 
-// Cursor beforeShellExecution hook — intercept grep/rg calls in bash commands.
+// Cursor postToolUse hook (matcher: "Shell") — graph context for shell grep/rg.
 //
-// Fires before any shell command executes. Detects grep or rg invocations,
-// extracts the search pattern, and runs the same ix text + ix locate parallel
-// flow as the pre-search hook. Always augments — never blocks bash.
+// After a shell command runs, detects grep or rg invocations, extracts the
+// search pattern, and runs the same ix text + ix locate flow as the Grep hook,
+// returning the summary as `additional_context`.
+//
+// Was a beforeShellExecution hook answering `permission: "allow"` +
+// `agent_message`: a permission decision (merged across hook sources, "deny
+// wins over ask, ask wins over allow") on commands it only meant to observe,
+// and not a documented way to add context to a command that is allowed.
+// postToolUse's `additional_context` is "injected into the conversation after
+// the tool result", and Shell is one of its matcher values; Shell's tool_input
+// carries `command` and `working_directory`.
+// Source: https://cursor.com/docs/hooks (Configuration; Matcher Configuration;
+// Hook events -> preToolUse, postToolUse, beforeShellExecution).
 //
 // Contract:
-//   exit 0 + JSON → inject agent_message, shell command still runs
-//   exit 0 + no stdout → pass through silently
+//   exit 0 + {"additional_context": ...} → context shown to the agent
+//   exit 0 + no stdout                   → nothing to say
+//   never blocks: postToolUse has no permission output
 
 import { checkHealth, runIxParallel } from "../lib/cli.js";
 import { IX_HOOK_VERBOSITY } from "../lib/config.js";
 import { classifyIntent, looksLikeSecret } from "../shared/intent-classifier.js";
 import { parseIxJson } from "../lib/parser.js";
+import {
+  ixRoot,
+  readHookInput,
+  writeHookOutput,
+  type PostToolUseOutput,
+  type ToolHookInput,
+} from "../shared/hook-io.js";
 
 // ── Payload type ──────────────────────────────────────────────────────────────
 
-interface ShellPayload {
+interface ShellToolInput {
   command?: string;
-  cwd?: string;
-  sandbox?: boolean;
-  // common base
-  conversation_id?: string;
-  generation_id?: string;
+  working_directory?: string;
 }
 
 // ── Pattern extraction ────────────────────────────────────────────────────────
@@ -91,19 +105,11 @@ function summarizeText(hits: TextHit[]): string {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk as Buffer);
-  }
+  const input = await readHookInput<ToolHookInput<ShellToolInput>>();
+  if (!input) process.exit(0);
+  if (IX_HOOK_VERBOSITY === "silent") process.exit(0);
 
-  let payload: ShellPayload = {};
-  try {
-    payload = JSON.parse(Buffer.concat(chunks).toString("utf8")) as ShellPayload;
-  } catch {
-    process.exit(0);
-  }
-
-  const command = payload.command ?? "";
+  const command = input.tool_input?.command ?? "";
   if (!command) process.exit(0);
 
   // Only intercept grep/rg
@@ -117,6 +123,14 @@ async function main(): Promise<void> {
   const { intent } = classifyIntent(pattern);
   if (intent === "literal" || intent === "file" || intent === "unknown") process.exit(0);
 
+  // Run ix in the repo the command ran in.
+  const workingDir = input.tool_input?.working_directory;
+  const root = await ixRoot({
+    workspace_roots: input.workspace_roots,
+    cwd: typeof workingDir === "string" && workingDir ? workingDir : input.cwd,
+  });
+  if (!root) process.exit(0);
+
   // Health gate
   const healthy = await checkHealth();
   if (!healthy) process.exit(0);
@@ -128,7 +142,7 @@ async function main(): Promise<void> {
     calls.push({ args: ["locate", pattern], label: "locate" });
   }
 
-  const results = await runIxParallel(calls, { timeout: 9_000 });
+  const results = await runIxParallel(calls, { timeout: 9_000, cwd: root });
 
   let locatePart = "";
   let locateRaw: LocateRaw | null = null;
@@ -152,7 +166,6 @@ async function main(): Promise<void> {
   }
 
   if (!locatePart && !textPart) process.exit(0);
-  if (IX_HOOK_VERBOSITY === "silent") process.exit(0);
 
   const parts: string[] = [`[ix] bash grep intercepted for '${pattern}'`];
   if (locatePart) parts.push(locatePart);
@@ -160,14 +173,13 @@ async function main(): Promise<void> {
   parts.push(`Prefer: ix_locate / ix_text over shell grep`);
 
   const context = parts.join(" — ");
-  const agentMessage =
+  const additionalContext =
     IX_HOOK_VERBOSITY === "verbose"
       ? `${context}\n\n${JSON.stringify({ locate: locateRaw, text: textRaw }, null, 2)}`
       : context;
 
-  process.stdout.write(
-    JSON.stringify({ permission: "allow", agent_message: agentMessage }),
-  );
+  const output: PostToolUseOutput = { additional_context: additionalContext };
+  writeHookOutput(output);
   process.exit(0);
 }
 

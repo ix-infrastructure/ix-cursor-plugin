@@ -1,24 +1,39 @@
 #!/usr/bin/env node
 // Copyright 2026 Ix Infrastructure Inc.
 
-// Cursor preToolUse hook (matcher: "Grep") — graph-first search interception.
+// Cursor Grep hook — graph-first search context. Registered twice (matcher
+// "Grep"), and branches on the payload's hook_event_name:
 //
-// Fires before Cursor's native Grep tool executes. Classifies the search pattern
-// as a code symbol or a literal string. For symbol-like queries, runs ix locate
-// and ix text in parallel and injects a compact graph-backed summary so the agent
-// has structured knowledge before raw text search results arrive.
+//   postToolUse (default, augment): classifies the search pattern; for
+//     symbol-like queries runs ix locate + ix text and returns a compact
+//     graph-backed summary as `additional_context`, which Cursor injects
+//     "into the conversation after the tool result".
+//   preToolUse (opt-in, IX_BLOCK_ON_HIGH_CONFIDENCE=true): on a high-confidence
+//     symbol match, denies the native Grep with the summary as `agent_message`,
+//     which Cursor feeds back to the agent "when the action is denied".
+//     Otherwise it exits without output and the Grep runs.
 //
-// V1 ships in augment-only mode (IX_BLOCK_ON_HIGH_CONFIDENCE defaults to false).
-// Blocking is available but disabled until false-positive rates are measured.
-//
-// Contract:
-//   exit 0 + JSON → inject agent_message, native Grep still runs (augment)
-//   exit 0 + no stdout → pass through silently
-//   exit 2 → block native Grep (only when IX_BLOCK_ON_HIGH_CONFIDENCE=true)
+// The augment path used to answer preToolUse with `permission: "allow"` +
+// `agent_message`; Cursor delivers agent_message only on deny, so it never
+// reached the model. The deny path used to exit 2; the docs define exit 0 as
+// "use the JSON output" and exit 2 only as "block the action", so it now exits
+// 0 to be sure the agent_message is read.
+// Source: https://cursor.com/docs/hooks (Command-Based Hooks -> exit codes;
+// Hook events -> preToolUse, postToolUse).
+
+import { isAbsolute, relative } from "node:path";
 
 import { checkHealth, runIxParallel } from "../lib/cli.js";
 import { IX_BLOCK_ON_HIGH_CONFIDENCE, IX_HOOK_VERBOSITY } from "../lib/config.js";
 import { parseIxJson } from "../lib/parser.js";
+import {
+  ixRoot,
+  readHookInput,
+  writeHookOutput,
+  type PostToolUseOutput,
+  type PreToolUseOutput,
+  type ToolHookInput,
+} from "../shared/hook-io.js";
 import { classifyIntent, looksLikeSecret } from "../shared/intent-classifier.js";
 
 // Regex metacharacter check — patterns with these shouldn't be sent to ix locate
@@ -93,32 +108,27 @@ function summarizeText(hits: TextHit[]): string {
 
 // ── Hook payload type ─────────────────────────────────────────────────────────
 
-interface PreToolUsePayload {
-  tool_name?: string;
-  tool_input?: {
-    pattern?: string;
-    path?: string;
-    type?: string; // file type / language filter
-  };
-  cwd?: string;
+// Cursor does not document its Grep tool's input fields; these are the ones
+// this hook reads when present.
+interface GrepToolInput {
+  pattern?: string;
+  path?: string;
+  type?: string; // file type / language filter
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk as Buffer);
-  }
+  const input = await readHookInput<ToolHookInput<GrepToolInput>>();
+  if (!input) process.exit(0);
 
-  let payload: PreToolUsePayload = {};
-  try {
-    payload = JSON.parse(Buffer.concat(chunks).toString("utf8")) as PreToolUsePayload;
-  } catch {
-    process.exit(0);
-  }
+  // preToolUse only matters when blocking is enabled; otherwise let Grep run
+  // untouched and add context afterwards, from postToolUse.
+  const isPreToolUse = input.hook_event_name === "preToolUse";
+  if (isPreToolUse && !IX_BLOCK_ON_HIGH_CONFIDENCE) process.exit(0);
+  if (!isPreToolUse && IX_HOOK_VERBOSITY === "silent") process.exit(0);
 
-  const pattern = payload.tool_input?.pattern ?? "";
+  const pattern = input.tool_input?.pattern ?? "";
   if (!pattern || pattern.length < 3) process.exit(0);
 
   // Skip secret-like patterns — never log or forward credentials
@@ -128,12 +138,18 @@ async function main(): Promise<void> {
   const { intent } = classifyIntent(pattern);
   if (intent !== "symbol") process.exit(0);
 
+  const root = await ixRoot(input);
+  if (!root) process.exit(0);
+
   // Health gate
   const healthy = await checkHealth();
   if (!healthy) process.exit(0);
 
-  const pathArg = payload.tool_input?.path;
-  const langArg = payload.tool_input?.type;
+  // `ix text --path` is workspace-relative; Cursor may pass an absolute path.
+  const rawPath = input.tool_input?.path;
+  const relPath = rawPath && isAbsolute(rawPath) ? relative(root, rawPath) : rawPath;
+  const pathArg = relPath && !relPath.startsWith("..") ? relPath : undefined;
+  const langArg = input.tool_input?.type;
 
   // Build parallel calls: ix text (always) + ix locate (only for plain patterns)
   const textArgs = [
@@ -151,7 +167,7 @@ async function main(): Promise<void> {
   }
 
   // Run in parallel (9 s budget; hook timeout is 10 s)
-  const results = await runIxParallel(calls, { timeout: 9_000 });
+  const results = await runIxParallel(calls, { timeout: 9_000, cwd: root });
 
   // Parse locate result
   let locatePart = "";
@@ -201,43 +217,35 @@ async function main(): Promise<void> {
 
   const context = parts.join(" — ");
 
-  // Determine mode. V1 defaults to augment; blocking requires explicit opt-in.
   const fullyResolved =
     locatePart.startsWith("symbol:") &&
     !!(results["locate"]?.stdout);
 
-  if (IX_BLOCK_ON_HIGH_CONFIDENCE && fullyResolved && gate === "ok") {
+  if (isPreToolUse) {
+    if (!(fullyResolved && gate === "ok")) process.exit(0);
     const denyMessage =
       IX_HOOK_VERBOSITY === "verbose"
         ? `${context}\n\n${JSON.stringify({ locate: locateRaw, text: textRaw }, null, 2)}`
         : context;
-    // Block native Grep — Ix has a high-confidence answer
-    process.stdout.write(
-      JSON.stringify({
-        permission: "deny",
-        agent_message: denyMessage,
-        user_message: `[ix] Blocked native Grep — graph-backed match found for '${pattern}'.`,
-      }),
-    );
-    process.exit(2); // exit 2 = block in Cursor hook protocol
-  }
-
-  if (IX_HOOK_VERBOSITY === "silent") {
+    // Block native Grep — Ix has a high-confidence answer. Exit 0: that is the
+    // exit code for which Cursor documents reading the JSON.
+    const output: PreToolUseOutput = {
+      permission: "deny",
+      agent_message: denyMessage,
+      user_message: `[ix] Blocked native Grep — graph-backed match found for '${pattern}'.`,
+    };
+    writeHookOutput(output);
     process.exit(0);
   }
 
-  const agentMessage =
+  const additionalContext =
     IX_HOOK_VERBOSITY === "verbose"
       ? `${context}\n\n${JSON.stringify({ locate: locateRaw, text: textRaw }, null, 2)}`
       : context;
 
-  // Augment: inject context and let native Grep also run
-  process.stdout.write(
-    JSON.stringify({
-      permission: "allow",
-      agent_message: agentMessage,
-    }),
-  );
+  // Augment: the Grep already ran; add the graph view after its result.
+  const output: PostToolUseOutput = { additional_context: additionalContext };
+  writeHookOutput(output);
 
   process.exit(0);
 }

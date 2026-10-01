@@ -157,7 +157,7 @@ ix-cursor-plugin/
 │   ├── ix-debug/
 │   ├── ix-architecture/
 │   └── ix-docs/
-├── subagents/
+├── agents/
 │   ├── ix-explorer.md
 │   ├── ix-system-explorer.md
 │   ├── ix-bug-investigator.md
@@ -166,13 +166,13 @@ ix-cursor-plugin/
 ├── hooks/
 │   ├── prompt-briefing.ts
 │   ├── pre-search.ts
-│   ├── pre-bash.ts
-│   ├── pre-edit.ts
+│   ├── shell-search.ts
+│   ├── edit-impact.ts
 │   ├── post-edit-ingest.ts
-│   └── stop-annotate.ts
+│   └── debounced-map.ts
 └── shared/
     ├── cognitive-model.md
-    ├── ledger.ts
+    ├── hook-io.ts
     ├── intent-classifier.ts
     └── summarizers.ts
 ```
@@ -423,7 +423,8 @@ Claude equivalent: `hooks/ix-briefing.sh`
 
 Cursor behavior:
 
-- Trigger before the agent handles a new prompt
+- Trigger on `sessionStart` and return `additional_context`. (`beforeSubmitPrompt`
+  output is only `continue`/`user_message`, so it cannot inject context.)
 - Call `ix_briefing`
 - Cache the result with a 10-minute TTL
 - Inject concise context:
@@ -451,8 +452,9 @@ Cursor behavior:
 
 V1 guidance:
 
-- Start in augment mode
-- Enable blocking only for high-confidence symbol cases after validation
+- Start in augment mode: `postToolUse` (`Grep`, `Shell`) returning `additional_context`.
+  A `preToolUse` `agent_message` reaches the agent only on deny.
+- Enable blocking (`preToolUse` deny) only for high-confidence symbol cases after validation
 
 ### C. Pre-edit hook
 
@@ -460,7 +462,8 @@ Claude equivalent: `hooks/ix-pre-edit.sh`
 
 Cursor behavior:
 
-- Trigger before edit, write, or multi-edit
+- Trigger on `postToolUse` for `Write` (Cursor delivers a `preToolUse`
+  `agent_message` only when the write is denied), returning `additional_context`
 - Detect file type
 - Skip non-code files
 - Call `ix_impact`
@@ -487,16 +490,9 @@ Cursor behavior:
 
 Claude equivalent: `hooks/ix-annotate.sh`
 
-Cursor behavior:
-
-- Optionally emit one-line attribution at task end
-- Examples:
-  - Ix surfaced the relevant symbol before raw search
-  - Ix warned about edit risk due to shared dependents
-
-V1 default:
-
-- Off, or brief-only
+Not ported. Cursor's `stop` output is only `followup_message`, which submits a
+new user message and starts another agent turn; there is no field that adds a
+note to the finished turn. The first implementation also had no ledger writer.
 
 ### F. Debounced full-map hook
 
@@ -515,7 +511,9 @@ Cursor behavior:
 
 ## 7. Shared ledger and telemetry
 
-Retain the ledger system from the Claude plugin.
+Not implemented. The ledger existed only to feed the stop annotation (E), which
+Cursor's hook protocol cannot deliver; it was removed with it. The goals below
+remain open.
 
 ### Stored events
 
@@ -573,7 +571,7 @@ Automatic issue filing should remain out of scope for the Cursor port.
 | Bash grep augmentation | Yes | Partial | P2 |
 | Pre-edit impact warning | Yes | Yes | P0 |
 | Post-edit incremental ingest | Yes | Yes | P0 |
-| Stop annotation | Yes | Yes | P2 |
+| Stop annotation | Yes | No (no Cursor channel) | — |
 | Debounced full-map refresh | Yes | Yes | P1 |
 | Install-time permission model | Yes | Yes | P0 |
 | Shared cognitive model | Yes | Yes, as rules | P0 |

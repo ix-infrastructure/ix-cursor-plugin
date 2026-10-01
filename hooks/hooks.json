@@ -1,49 +1,51 @@
 {
   "version": 1,
   "hooks": {
-    "beforeSubmitPrompt": [
+    "sessionStart": [
       {
-        "command": "node mcp/dist/hooks/prompt-briefing.js",
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/mcp/dist/hooks/prompt-briefing.js\"",
         "timeout": 10,
         "failClosed": false
       }
     ],
     "preToolUse": [
       {
+        "matcher": "Grep",
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/mcp/dist/hooks/pre-search.js\"",
+        "timeout": 10,
+        "failClosed": false
+      }
+    ],
+    "postToolUse": [
+      {
         "matcher": "Write",
-        "command": "node mcp/dist/hooks/pre-edit.js",
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/mcp/dist/hooks/edit-impact.js\"",
         "timeout": 10,
         "failClosed": false
       },
       {
         "matcher": "Grep",
-        "command": "node mcp/dist/hooks/pre-search.js",
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/mcp/dist/hooks/pre-search.js\"",
+        "timeout": 10,
+        "failClosed": false
+      },
+      {
+        "matcher": "Shell",
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/mcp/dist/hooks/shell-search.js\"",
         "timeout": 10,
         "failClosed": false
       }
     ],
     "afterFileEdit": [
       {
-        "command": "node mcp/dist/hooks/post-edit-ingest.js",
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/mcp/dist/hooks/post-edit-ingest.js\"",
         "timeout": 5,
-        "failClosed": false
-      }
-    ],
-    "beforeShellExecution": [
-      {
-        "command": "node mcp/dist/hooks/pre-bash.js",
-        "timeout": 10,
         "failClosed": false
       }
     ],
     "stop": [
       {
-        "command": "node mcp/dist/hooks/stop-annotate.js",
-        "timeout": 5,
-        "failClosed": false
-      },
-      {
-        "command": "node mcp/dist/hooks/debounced-map.js",
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/mcp/dist/hooks/debounced-map.js\"",
         "timeout": 5,
         "failClosed": false
       }

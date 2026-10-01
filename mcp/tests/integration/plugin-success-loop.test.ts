@@ -9,6 +9,13 @@ import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import {
+  assertOutputFields,
+  commonInput,
+  modelVisibleText,
+  registrationsOf,
+} from "../helpers/cursor-hooks.js";
+
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 const MCP_ROOT = resolve(TEST_DIR, "../..");
 const FIXTURE_DIR = resolve(TEST_DIR, "../fixtures/ix_outputs");
@@ -58,12 +65,14 @@ function fixtureEnv(tempDir: string, extra: Record<string, string> = {}): Record
     IX_BIN: MOCK_IX_PATH,
     IX_HOOK_VERBOSITY: "brief",
     IX_MOCK_LOG_FILE: join(tempDir, "ix.log"),
+    IX_MOCK_LOG_CWD: "1",
     IX_MOCK_STATE_FILE: join(tempDir, "ix-state.txt"),
     IX_MOCK_BRIEFING_FILE: join(FIXTURE_DIR, "briefing.json"),
     IX_MOCK_SUBSYSTEMS_FILE: join(FIXTURE_DIR, "subsystems_before_map.json"),
     IX_MOCK_SUBSYSTEMS_AFTER_MAP_FILE: join(FIXTURE_DIR, "subsystems_after_map.json"),
     IX_MOCK_IMPACT_FILE: join(FIXTURE_DIR, "impact_high.json"),
     IX_MOCK_MAP_LOG_FILE: join(tempDir, "map.log"),
+    IX_MOCK_TEXT_FILE: join(FIXTURE_DIR, "text_hits.json"),
     CURSOR_PROJECT_DIR: "/repo",
     TMPDIR: tempDir,
     // Plugin state (caches, debounce stamps) is per-user; keep it per-test.
@@ -115,6 +124,36 @@ async function runHook(
 
     child.stdin.end(JSON.stringify(payload));
   });
+}
+
+/**
+ * Runs mcp/hooks/<name>.ts once for each event hooks/hooks.json registers it
+ * on (optionally only `event`), with the documented common input, and checks
+ * the output against Cursor's schema for that event. Returns the parsed output
+ * per event ({} for no output).
+ */
+async function runRegistered(
+  name: string,
+  input: (event: string) => Record<string, unknown>,
+  env: Record<string, string>,
+  workspaceRoots: string[],
+  only?: string,
+): Promise<Map<string, Record<string, unknown>>> {
+  const registrations = registrationsOf(name).filter((r) => !only || r.event === only);
+  assert.ok(registrations.length > 0, `hooks.json does not register ${name}${only ? ` on ${only}` : ""}`);
+  const outputs = new Map<string, Record<string, unknown>>();
+  for (const { event } of registrations) {
+    const result = await runHook(
+      `hooks/${name}.ts`,
+      { ...commonInput(event, workspaceRoots), ...input(event) },
+      env,
+    );
+    assert.equal(result.code, 0, `${name} on ${event}: ${result.stderr}`);
+    const output = result.stdout ? (JSON.parse(result.stdout) as Record<string, unknown>) : {};
+    assertOutputFields(event, output);
+    outputs.set(event, output);
+  }
+  return outputs;
 }
 
 async function gitRepo(path: string): Promise<string> {
@@ -187,34 +226,30 @@ async function invokeSubsystemsTool(env: Record<string, string>): Promise<ToolRe
   }
 }
 
-test("prompt briefing injects context and subsystem tool returns structured data", { concurrency: false }, async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "ix-cursor-itest-"));
+test("session briefing reaches the model through sessionStart additional_context", { concurrency: false }, async (t) => {
+  const tempDir = await realpath(await mkdtemp(join(tmpdir(), "ix-cursor-itest-")));
   t.after(async () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
+  const repo = await gitRepo(join(tempDir, "repo"));
   const env = fixtureEnv(tempDir);
   const logPath = requiredEnv(env, "IX_MOCK_LOG_FILE");
 
-  const hookResult = await runHook(
-    "hooks/prompt-briefing.ts",
-    { prompt: "What subsystems are in this repo?" },
+  const outputs = await runRegistered(
+    "prompt-briefing",
+    () => ({ session_id: "conv-1", is_background_agent: false, composer_mode: "agent" }),
     env,
+    [repo],
   );
 
-  assert.equal(hookResult.code, 0, hookResult.stderr);
-  assert.ok(hookResult.stdout, "prompt briefing hook should emit JSON");
+  // Registered on sessionStart only, and its text is in a field Cursor reads.
+  assert.deepEqual([...outputs.keys()], ["sessionStart"]);
+  const context = modelVisibleText("sessionStart", outputs.get("sessionStart")!);
+  assert.match(context, /\[ix\] Session briefing:/);
+  assert.match(context, /Ship Cursor plugin integration tests/);
 
-  const hookJson = JSON.parse(hookResult.stdout) as {
-    continue?: boolean;
-    additional_context?: string;
-  };
-
-  assert.equal(hookJson.continue, true);
-  assert.match(hookJson.additional_context ?? "", /\[ix\] Session briefing:/);
-  assert.match(hookJson.additional_context ?? "", /Ship Cursor plugin integration tests/);
-
-  await waitForLogLine(logPath, "briefing --format json");
+  await waitForLogLine(logPath, `briefing --format json\tcwd=${repo}`);
 
   const toolResult = await invokeSubsystemsTool(env);
   assert.equal(toolResult.map_rev, 101);
@@ -227,36 +262,38 @@ test("prompt briefing injects context and subsystem tool returns structured data
   assert.ok(logLines.some((line) => line.includes("subsystems --format json")));
 });
 
-test("pre-edit hook warns for high-risk file edits", { concurrency: false }, async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "ix-cursor-itest-"));
+async function editFixture(t: { after: (fn: () => Promise<void>) => void }) {
+  const tempDir = await realpath(await mkdtemp(join(tmpdir(), "ix-cursor-itest-")));
   t.after(async () => {
     await rm(tempDir, { recursive: true, force: true });
   });
+  const repo = await gitRepo(join(tempDir, "repo"));
+  await mkdir(join(repo, "src"));
+  const file = join(repo, "src", "shared.ts");
+  await writeFile(file, "export const x = 1;\n");
+  return { tempDir, repo, file };
+}
 
+const writeInput = (file: string, repo: string) => () => ({
+  tool_name: "Write",
+  tool_input: { file_path: file },
+  tool_use_id: "tu-1",
+  cwd: repo,
+});
+
+test("edit-impact warns the model after a high-risk write, from the repo root", { concurrency: false }, async (t) => {
+  const { tempDir, repo, file } = await editFixture(t);
   const env = fixtureEnv(tempDir);
-  const result = await runHook(
-    "hooks/pre-edit.ts",
-    {
-      tool_name: "Edit",
-      tool_input: { file_path: "/repo/src/shared.ts" },
-      cwd: "/repo",
-    },
-    env,
-  );
 
-  assert.equal(result.code, 0, result.stderr);
-  assert.ok(result.stdout, "pre-edit hook should emit advisory JSON");
+  const outputs = await runRegistered("edit-impact", writeInput(file, repo), env, [repo]);
 
-  const output = JSON.parse(result.stdout) as {
-    permission?: string;
-    agent_message?: string;
-  };
+  assert.deepEqual([...outputs.keys()], ["postToolUse"]);
+  const context = modelVisibleText("postToolUse", outputs.get("postToolUse")!);
+  assert.match(context, /HIGH-RISK EDIT/);
+  assert.match(context, /shared\.ts has 5 dependents/);
 
-  assert.equal(output.permission, "allow");
-  assert.match(output.agent_message ?? "", /HIGH-RISK EDIT/);
-  assert.match(output.agent_message ?? "", /shared\.ts has 5 dependents/);
-
-  await waitForLogLine(requiredEnv(env, "IX_MOCK_LOG_FILE"), "impact src/shared.ts --format json");
+  // ix runs in the project, not wherever Cursor started the hook process.
+  await waitForLogLine(requiredEnv(env, "IX_MOCK_LOG_FILE"), `impact src/shared.ts --format json\tcwd=${repo}`);
 });
 
 /**
@@ -266,33 +303,17 @@ test("pre-edit hook warns for high-risk file edits", { concurrency: false }, asy
  * refusal, and Ix#539 asks the plugins to tolerate it before the CLI starts
  * producing it.
  */
-test("pre-edit hook still warns when ix exits non-zero with a usable body", { concurrency: false }, async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "ix-cursor-itest-"));
-  t.after(async () => {
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
+test("edit-impact still warns when ix exits non-zero with a usable body", { concurrency: false }, async (t) => {
+  const { tempDir, repo, file } = await editFixture(t);
   const env = fixtureEnv(tempDir, { IX_MOCK_IMPACT_EXIT: "1" });
-  const result = await runHook(
-    "hooks/pre-edit.ts",
-    { tool_name: "Edit", tool_input: { file_path: "/repo/src/shared.ts" }, cwd: "/repo" },
-    env,
-  );
 
-  assert.equal(result.code, 0, result.stderr);
-  assert.ok(result.stdout, "a non-zero exit must not discard the impact body");
-
-  const output = JSON.parse(result.stdout) as { permission?: string; agent_message?: string };
-  assert.equal(output.permission, "allow");
-  assert.match(output.agent_message ?? "", /HIGH-RISK EDIT/);
+  const outputs = await runRegistered("edit-impact", writeInput(file, repo), env, [repo]);
+  assert.match(modelVisibleText("postToolUse", outputs.get("postToolUse")!), /HIGH-RISK EDIT/);
 });
 
 /** The other half: a refusal body carries no risk, so the hook stays quiet. */
-test("pre-edit hook stays silent when ix refuses the target", { concurrency: false }, async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "ix-cursor-itest-"));
-  t.after(async () => {
-    await rm(tempDir, { recursive: true, force: true });
-  });
+test("edit-impact stays silent when ix refuses the target", { concurrency: false }, async (t) => {
+  const { tempDir, repo, file } = await editFixture(t);
 
   const refusal = join(tempDir, "unresolved.json");
   await writeFile(
@@ -301,14 +322,86 @@ test("pre-edit hook stays silent when ix refuses the target", { concurrency: fal
   );
 
   const env = fixtureEnv(tempDir, { IX_MOCK_IMPACT_EXIT: "1", IX_MOCK_IMPACT_FILE: refusal });
-  const result = await runHook(
-    "hooks/pre-edit.ts",
-    { tool_name: "Edit", tool_input: { file_path: "/repo/src/shared.ts" }, cwd: "/repo" },
+  const outputs = await runRegistered("edit-impact", writeInput(file, repo), env, [repo]);
+  assert.deepEqual(outputs.get("postToolUse"), {}, "a refusal is not a risk warning");
+});
+
+test("edit-impact ignores a write outside every workspace root", { concurrency: false }, async (t) => {
+  const { tempDir, repo } = await editFixture(t);
+  const outside = join(tempDir, "elsewhere.ts");
+  await writeFile(outside, "x\n");
+  const env = fixtureEnv(tempDir);
+
+  const outputs = await runRegistered("edit-impact", writeInput(outside, repo), env, [repo]);
+  assert.deepEqual(outputs.get("postToolUse"), {});
+  assert.deepEqual(await readLogLines(requiredEnv(env, "IX_MOCK_LOG_FILE")), []);
+});
+
+test("Grep gets graph context after it runs; preToolUse stays out of the way unless blocking is on", { concurrency: false }, async (t) => {
+  const tempDir = await realpath(await mkdtemp(join(tmpdir(), "ix-cursor-itest-")));
+  t.after(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+  const repo = await gitRepo(join(tempDir, "repo"));
+  const env = fixtureEnv(tempDir, { IX_MOCK_LOCATE_FILE: join(FIXTURE_DIR, "locate_resolved.json") });
+  const grep = () => ({
+    tool_name: "Grep",
+    tool_input: { pattern: "SessionManager", path: join(repo, "src") },
+    tool_use_id: "tu-2",
+    cwd: repo,
+  });
+
+  const outputs = await runRegistered("pre-search", grep, env, [repo]);
+  assert.deepEqual([...outputs.keys()].sort(), ["postToolUse", "preToolUse"]);
+
+  // Augment (default): nothing before the Grep, the summary after it.
+  assert.deepEqual(outputs.get("preToolUse"), {});
+  const context = modelVisibleText("postToolUse", outputs.get("postToolUse")!);
+  assert.match(context, /symbol: SessionManager, class, manager\.ts/);
+  assert.match(context, /2 text hits in manager\.ts, index\.ts/);
+
+  // An absolute Grep path becomes the workspace-relative path `ix text` takes.
+  const log = await readLogLines(requiredEnv(env, "IX_MOCK_LOG_FILE"));
+  assert.ok(log.includes(`text SessionManager --limit 15 --path src --format json\tcwd=${repo}`), log.join("\n"));
+  assert.ok(log.includes(`locate SessionManager --format json\tcwd=${repo}`), log.join("\n"));
+
+  // Opt-in blocking: a deny whose agent_message carries the summary, exit 0.
+  const blocking = fixtureEnv(tempDir, {
+    IX_MOCK_LOCATE_FILE: join(FIXTURE_DIR, "locate_resolved.json"),
+    IX_BLOCK_ON_HIGH_CONFIDENCE: "true",
+  });
+  const blocked = await runRegistered("pre-search", grep, blocking, [repo], "preToolUse");
+  const denied = blocked.get("preToolUse")!;
+  assert.equal(denied["permission"], "deny");
+  assert.match(modelVisibleText("preToolUse", denied), /symbol: SessionManager/);
+});
+
+test("shell grep gets graph context after the command runs, in the command's repo", { concurrency: false }, async (t) => {
+  const tempDir = await realpath(await mkdtemp(join(tmpdir(), "ix-cursor-itest-")));
+  t.after(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+  const repo = await gitRepo(join(tempDir, "repo"));
+  const env = fixtureEnv(tempDir, { IX_MOCK_LOCATE_FILE: join(FIXTURE_DIR, "locate_resolved.json") });
+
+  const outputs = await runRegistered(
+    "shell-search",
+    () => ({
+      tool_name: "Shell",
+      tool_input: { command: "rg SessionManager src", working_directory: repo },
+      tool_output: "{\"exitCode\":0}",
+      tool_use_id: "tu-3",
+      cwd: repo,
+    }),
     env,
+    [repo],
   );
 
-  assert.equal(result.code, 0, result.stderr);
-  assert.equal(result.stdout.trim(), "", "a refusal is not a risk warning");
+  assert.deepEqual([...outputs.keys()], ["postToolUse"]);
+  const context = modelVisibleText("postToolUse", outputs.get("postToolUse")!);
+  assert.match(context, /bash grep intercepted for 'SessionManager'/);
+  assert.match(context, /symbol: SessionManager/);
+  await waitForLogLine(requiredEnv(env, "IX_MOCK_LOG_FILE"), `locate SessionManager --format json\tcwd=${repo}`);
 });
 
 test("post-edit hook requests the guarded root map and a follow-up query sees the updated graph", { concurrency: false }, async (t) => {
@@ -398,12 +491,14 @@ test("stop hook maps each mapped workspace repo once, from the payload's workspa
   // CURSOR_PROJECT_DIR is only a fallback; the payload's roots win.
   const env = fixtureEnv(tempDir, { IX_MOCK_MAPPED_ROOTS: `${a}:${b}:${plain}`, CURSOR_PROJECT_DIR: plain });
 
-  const result = await runHook(
-    "hooks/debounced-map.ts",
-    { status: "completed", loop_count: 0, workspace_roots: [a, join(a, "pkg"), b, plain] },
+  const outputs = await runRegistered(
+    "debounced-map",
+    () => ({ status: "completed", loop_count: 0 }),
     env,
+    [a, join(a, "pkg"), b, plain],
   );
-  assert.equal(result.code, 0, result.stderr);
+  // stop's only output is followup_message, which would start another turn.
+  assert.deepEqual(outputs.get("stop"), {});
 
   const mapLogPath = requiredEnv(env, "IX_MOCK_MAP_LOG_FILE");
   const started = Date.now();

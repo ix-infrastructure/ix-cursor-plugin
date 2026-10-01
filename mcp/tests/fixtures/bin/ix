@@ -10,7 +10,13 @@ FIXTURES_DIR="${SELF_DIR}/../ix_outputs"
 LOG_FILE="${IX_MOCK_LOG_FILE:-}"
 
 log_call() {
-  if [ -n "${LOG_FILE}" ]; then
+  if [ -z "${LOG_FILE}" ]; then
+    return
+  fi
+  # IX_MOCK_LOG_CWD=1 appends the directory ix was run from.
+  if [ "${IX_MOCK_LOG_CWD:-}" = "1" ]; then
+    printf '%s %s\tcwd=%s\n' "${SUBCOMMAND}" "$*" "$(pwd -P)" >> "${LOG_FILE}"
+  else
     printf '%s %s\n' "${SUBCOMMAND}" "$*" >> "${LOG_FILE}"
   fi
 }
@@ -107,7 +113,31 @@ case "${SUBCOMMAND}" in
           ;;
       esac
     done
-    printf '{}\n'
+    if [ "${SUBCOMMAND}" = "locate" ] && [ -n "${IX_MOCK_LOCATE_FILE:-}" ]; then
+      cat "${IX_MOCK_LOCATE_FILE}"
+    else
+      printf '{}\n'
+    fi
+    ;;
+  text)
+    # `ix text <term> [--limit n] [--path dir] [--language l] [--format f]`;
+    # --path is workspace-relative, so an absolute one is a caller bug.
+    shift
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --limit|--language|--format) shift ;;
+        --path)
+          shift
+          case "${1:-}" in
+            /*) printf 'error: --path must be workspace-relative: %s\n' "$1" >&2; exit 1 ;;
+          esac
+          ;;
+        -*) printf "error: unknown option '%s'\n" "$1" >&2; exit 1 ;;
+        *) printf 'error: too many arguments for text\n' >&2; exit 1 ;;
+      esac
+      shift
+    done
+    cat "${IX_MOCK_TEXT_FILE:-${FIXTURES_DIR}/text_hits.json}"
     ;;
   --version)
     printf '{"ok":true,"version":"%s"}\n' "${IX_MOCK_VERSION:-0.0.0-test}"

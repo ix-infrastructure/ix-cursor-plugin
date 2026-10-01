@@ -3,7 +3,7 @@
 // Intent classifier — formalizes ix_query_intent() from ix-lib.sh.
 //
 // Classifies a search pattern as symbol, literal, file, or unknown, and
-// attaches a confidence score. Used by pre-search and pre-bash hooks.
+// attaches a confidence score. Used by the pre-search and shell-search hooks.
 //
 // Confidence ranges:
 //   0.9  PascalCase / well-formed file path → very likely correct intent

@@ -8,14 +8,31 @@ It is intended for graph-first code understanding and safer repository workflows
 
 - Skills such as `/ix-understand`, `/ix-investigate`, and `/ix-impact`
 - MCP tools such as `ix_locate`, `ix_explain`, `ix_callers`, and `ix_briefing`
-- Hooks for prompt briefing, pre-edit warnings, search guidance, and post-edit ingest
+- Subagents such as `ix-system-explorer` and `ix-bug-investigator`, which the skills delegate to
+- Hooks for a session briefing, edit impact warnings, search context, and graph refresh
 
 ## Repository Layout
 
 - `.cursor-plugin/plugin.json`: Cursor plugin manifest
 - `mcp.json`: MCP server wiring for Cursor
 - `hooks/hooks.json`: Cursor hook wiring
+- `agents/`: subagents (Cursor loads plugin agents from `agents/`, declared in the manifest)
 - `install-local.sh`: local install helper
+
+## Hooks
+
+Each hook uses an event whose output Cursor actually reads ([Cursor hooks reference](https://cursor.com/docs/hooks)):
+
+| Event | Script | What reaches the agent |
+|---|---|---|
+| `sessionStart` | `prompt-briefing` | Ix Pro briefing (goals, plans, decisions) as `additional_context` in the new conversation |
+| `postToolUse` `Write` | `edit-impact` | Blast-radius warning after an edit to a file with many dependents |
+| `postToolUse` `Grep` | `pre-search` | Graph view of a symbol-like search (`ix locate` + `ix text`) after the search |
+| `preToolUse` `Grep` | `pre-search` | Nothing, unless `IX_BLOCK_ON_HIGH_CONFIDENCE=true`: then a confident match denies the Grep and returns the graph answer |
+| `postToolUse` `Shell` | `shell-search` | Same graph view for `grep`/`rg` run in the shell |
+| `afterFileEdit`, `stop` | `post-edit-ingest`, `debounced-map` | Nothing; they refresh an already-mapped repo's graph in the background |
+
+`IX_HOOK_VERBOSITY=silent` turns off the text-producing hooks. `sessionStart` hooks do not run in Cursor cloud agents.
 
 ## Prerequisites
 

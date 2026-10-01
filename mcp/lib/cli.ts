@@ -180,7 +180,7 @@ export async function runIxLlm(
 
 export async function runIxParallel(
   calls: ParallelCall[],
-  opts: { timeout?: number } = {},
+  opts: IxRunOptions = {},
 ): Promise<Record<string, IxResult>> {
   const settled = await Promise.allSettled(
     calls.map((c) => runIx(c.args, opts)),

@@ -1,4 +1,3 @@
-import type { LedgerEvent } from "./ledger.js";
 export interface RiskResult {
     target?: string;
     riskLevel?: string;
@@ -13,6 +12,5 @@ export interface RiskResult {
         name?: string;
     }>;
 }
-export declare function summarizeTurn(events: LedgerEvent[]): string;
 export declare function summarizeRisk(result: RiskResult): string;
 //# sourceMappingURL=summarizers.d.ts.map
