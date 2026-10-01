@@ -48,11 +48,66 @@ case "${SUBCOMMAND}" in
     exit "${IX_MOCK_IMPACT_EXIT:-0}"
     ;;
   map)
+    # Strict like the real CLI: `ix map [path] [--silent] [--format <fmt>]`.
+    # A path that is not a directory is rejected (Ix#545, v0.10.6+).
+    map_path=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --silent) ;;
+        --format) shift ;;
+        -*) printf "error: unknown option '%s'\n" "$1" >&2; exit 1 ;;
+        *)
+          if [ -n "${map_path}" ]; then
+            printf 'error: too many arguments for map\n' >&2; exit 1
+          fi
+          map_path="$1"
+          ;;
+      esac
+      shift
+    done
+    if [ -n "${map_path}" ] && [ ! -d "${map_path}" ]; then
+      printf 'Map path is not a directory: %s\n' "${map_path}" >&2
+      exit 1
+    fi
+    if [ -n "${IX_MOCK_MAP_LOG_FILE:-}" ]; then
+      printf 'path=%s\tcwd=%s\tIX_AUTO_MAP=%s\n' "${map_path}" "$(pwd -P)" "${IX_AUTO_MAP:-}" >> "${IX_MOCK_MAP_LOG_FILE}"
+    fi
     if [ -n "${IX_MOCK_STATE_FILE:-}" ]; then
       mkdir -p "$(dirname "${IX_MOCK_STATE_FILE}")"
       printf 'mapped\n' > "${IX_MOCK_STATE_FILE}"
     fi
     exit 0
+    ;;
+  status)
+    # graphCompleted is true only for roots listed (colon-separated) in
+    # IX_MOCK_MAPPED_ROOTS, so an unmapped repo is the default.
+    status_root=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --format) shift ;;
+        --root) shift; status_root="${1:-}" ;;
+        *) printf "error: unknown option '%s'\n" "$1" >&2; exit 1 ;;
+      esac
+      shift
+    done
+    completed=false
+    IFS=':' read -r -a mapped_roots <<< "${IX_MOCK_MAPPED_ROOTS:-}"
+    for r in "${mapped_roots[@]}"; do
+      if [ -n "${r}" ] && [ "${r}" = "${status_root}" ]; then completed=true; fi
+    done
+    printf '{"backend":"ok","graphCompleted":%s,"mapCompleted":%s}\n' "${completed}" "${completed}"
+    ;;
+  locate|smells)
+    # Neither command has these flags in any released CLI.
+    for arg in "$@"; do
+      case "${SUBCOMMAND}:${arg}" in
+        locate:--limit|smells:--path)
+          printf "error: unknown option '%s'\n" "${arg}" >&2
+          exit 1
+          ;;
+      esac
+    done
+    printf '{}\n'
     ;;
   --version)
     printf '{"ok":true,"version":"%s"}\n' "${IX_MOCK_VERSION:-0.0.0-test}"

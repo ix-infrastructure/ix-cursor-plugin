@@ -37,7 +37,7 @@ If the resolved entity is a **class or module**, also call `ix_overview` with `{
 
 **Orphan check:** If `facts.callerCount === 0` AND `facts.calleeCount === 0` in the `ix_explain` result:
 - Report: "Symbol is a graph orphan — no detected dependencies. Either the graph needs a refresh (`ix_map`) or the file has no parseable import/call relationships."
-- Suggest calling `ix_map` with `{ "file": "<path>" }` as first step.
+- Suggest calling `ix_map` with `{}` (re-maps the workspace; `ix map` takes a directory, never a single file) as first step.
 - Stop here — skip Phases 3–5 unless the user specifically asks for source-level inspection.
 
 **Evaluate:** Is the explanation sufficient to answer the question?

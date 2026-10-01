@@ -14,7 +14,9 @@
 import { checkHealth, runIx } from "../lib/cli.js";
 import { IX_HOOK_VERBOSITY } from "../lib/config.js";
 import { parseIxJson } from "../lib/parser.js";
+import { gitRoot, projectDirs } from "../shared/auto-map.js";
 import { withCache } from "../shared/cache.js";
+import { rootKey } from "../shared/state-dir.js";
 
 const BRIEFING_TTL_MS = 600_000; // 10 minutes, matches Claude plugin
 
@@ -102,9 +104,18 @@ function formatVerboseBriefing(cache: BriefingCache): string {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  // Consume stdin (required; we don't use the payload for this hook)
-  for await (const _chunk of process.stdin) {
-    // drain
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(chunk as Buffer);
+  }
+
+  let workspaceRoots: unknown;
+  try {
+    workspaceRoots = (JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+      workspace_roots?: unknown;
+    }).workspace_roots;
+  } catch {
+    // No payload — fall back to CURSOR_PROJECT_DIR.
   }
 
   if (IX_HOOK_VERBOSITY === "silent") {
@@ -117,8 +128,13 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  const cache = await withCache("briefing", BRIEFING_TTL_MS, async () => {
-    const result = await runIx(["briefing"], { timeout: 9_000 });
+  // The briefing is per-project data: cache it per repo root and run ix there.
+  const projectDir = projectDirs(workspaceRoots)[0];
+  const root = projectDir ? await gitRoot(projectDir) : null;
+  const cacheKey = root ? `briefing-${rootKey(root)}` : "briefing";
+
+  const cache = await withCache(cacheKey, BRIEFING_TTL_MS, async () => {
+    const result = await runIx(["briefing"], { timeout: 9_000, ...(root ? { cwd: root } : {}) });
     // Left gating on the exit code, unlike the other hooks: `briefing` is a Pro
     // command, so on an OSS install the failure IS the answer and there is no
     // body worth reading. Throwing here is what keeps the briefing out of the

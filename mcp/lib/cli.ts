@@ -17,6 +17,12 @@ export interface IxResult {
   durationMs: number;
 }
 
+export interface IxRunOptions {
+  timeout?: number;
+  /** Working directory for ix (the project root); defaults to the hook's cwd. */
+  cwd?: string;
+}
+
 export interface ParallelCall {
   args: string[];
   label: string;
@@ -107,7 +113,7 @@ function assertAllowedCommand(bin: string, args: string[]): void {
 async function runIxFormat(
   args: string[],
   format: "json" | "llm",
-  opts: { timeout?: number } = {},
+  opts: IxRunOptions = {},
 ): Promise<IxResult> {
   const start = Date.now();
   const timeout = opts.timeout ?? timeoutFor(args[0] ?? "");
@@ -124,6 +130,7 @@ async function runIxFormat(
   try {
     const { stdout, stderr } = await execFileAsync(IX_BIN, fullArgs, {
       timeout,
+      ...(opts.cwd ? { cwd: opts.cwd } : {}),
       maxBuffer: 10 * 1024 * 1024,
     });
 
@@ -154,7 +161,7 @@ async function runIxFormat(
 // that parses output (tools' fallback path, hooks, version probe) relies on this.
 export async function runIx(
   args: string[],
-  opts: { timeout?: number } = {},
+  opts: IxRunOptions = {},
 ): Promise<IxResult> {
   return runIxFormat(args, "json", opts);
 }
@@ -164,7 +171,7 @@ export async function runIx(
 // by the caller (see lib/llm.ts); older CLIs do not understand `--format llm`.
 export async function runIxLlm(
   args: string[],
-  opts: { timeout?: number } = {},
+  opts: IxRunOptions = {},
 ): Promise<IxResult> {
   return runIxFormat(args, "llm", opts);
 }

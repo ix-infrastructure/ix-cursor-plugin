@@ -1,8 +1,8 @@
 // Copyright 2026 Ix Infrastructure Inc.
 
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync, spawn } from "node:child_process";
+import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -63,8 +63,11 @@ function fixtureEnv(tempDir: string, extra: Record<string, string> = {}): Record
     IX_MOCK_SUBSYSTEMS_FILE: join(FIXTURE_DIR, "subsystems_before_map.json"),
     IX_MOCK_SUBSYSTEMS_AFTER_MAP_FILE: join(FIXTURE_DIR, "subsystems_after_map.json"),
     IX_MOCK_IMPACT_FILE: join(FIXTURE_DIR, "impact_high.json"),
+    IX_MOCK_MAP_LOG_FILE: join(tempDir, "map.log"),
     CURSOR_PROJECT_DIR: "/repo",
     TMPDIR: tempDir,
+    // Plugin state (caches, debounce stamps) is per-user; keep it per-test.
+    XDG_STATE_HOME: join(tempDir, "state"),
     ...extra,
   };
 }
@@ -112,6 +115,12 @@ async function runHook(
 
     child.stdin.end(JSON.stringify(payload));
   });
+}
+
+async function gitRepo(path: string): Promise<string> {
+  await mkdir(path, { recursive: true });
+  execFileSync("git", ["init", "-q", path]);
+  return await realpath(path);
 }
 
 async function readLogLines(logPath: string): Promise<string[]> {
@@ -302,15 +311,17 @@ test("pre-edit hook stays silent when ix refuses the target", { concurrency: fal
   assert.equal(result.stdout.trim(), "", "a refusal is not a risk warning");
 });
 
-test("post-edit ingest triggers async map and follow-up subsystem query reflects updated graph state", { concurrency: false }, async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "ix-cursor-itest-"));
+test("post-edit hook requests the guarded root map and a follow-up query sees the updated graph", { concurrency: false }, async (t) => {
+  const tempDir = await realpath(await mkdtemp(join(tmpdir(), "ix-cursor-itest-")));
   t.after(async () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  const env = fixtureEnv(tempDir);
+  const repo = await gitRepo(join(tempDir, "repo"));
+  const env = fixtureEnv(tempDir, { IX_MOCK_MAPPED_ROOTS: repo, CURSOR_PROJECT_DIR: repo });
   const statePath = requiredEnv(env, "IX_MOCK_STATE_FILE");
   const logPath = requiredEnv(env, "IX_MOCK_LOG_FILE");
+  const mapLogPath = requiredEnv(env, "IX_MOCK_MAP_LOG_FILE");
 
   const before = await invokeSubsystemsTool(env);
   assert.equal(before.map_rev, 101);
@@ -318,8 +329,8 @@ test("post-edit ingest triggers async map and follow-up subsystem query reflects
   const hookResult = await runHook(
     "hooks/post-edit-ingest.ts",
     {
-      file_path: "/repo/src/new-test.ts",
-      workspace_roots: ["/repo"],
+      file_path: join(repo, "src", "new-test.ts"),
+      workspace_roots: [repo],
     },
     env,
   );
@@ -328,12 +339,80 @@ test("post-edit ingest triggers async map and follow-up subsystem query reflects
   assert.equal(hookResult.stdout, "");
 
   await waitForFile(statePath);
-  await waitForLogLine(logPath, "map src/new-test.ts");
+  // The root, never the edited file: `ix map <file>` is rejected by ix.
+  await waitForLogLine(logPath, `map ${repo} --silent`);
+  assert.deepEqual(await readLogLines(mapLogPath), [`path=${repo}\tcwd=${repo}\tIX_AUTO_MAP=1`]);
 
   const after = await invokeSubsystemsTool(env);
   assert.equal(after.map_rev, 102);
   assert.deepEqual(
     after.regions?.map((region) => region.label),
     ["Hooks", "Tools", "Tests"],
+  );
+
+  // A burst of edits shares the per-root debounce with the stop hook.
+  const again = await runHook(
+    "hooks/debounced-map.ts",
+    { status: "completed", loop_count: 0, workspace_roots: [repo] },
+    env,
+  );
+  assert.equal(again.code, 0, again.stderr);
+  await delay(300);
+  assert.equal((await readLogLines(mapLogPath)).length, 1);
+});
+
+test("post-edit hook does not map an unmapped repo or a file outside the workspace", { concurrency: false }, async (t) => {
+  const tempDir = await realpath(await mkdtemp(join(tmpdir(), "ix-cursor-itest-")));
+  t.after(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  const mapped = await gitRepo(join(tempDir, "mapped"));
+  const unmapped = await gitRepo(join(tempDir, "unmapped"));
+  const env = fixtureEnv(tempDir, { IX_MOCK_MAPPED_ROOTS: mapped, CURSOR_PROJECT_DIR: mapped });
+
+  for (const payload of [
+    { file_path: join(unmapped, "a.ts"), workspace_roots: [unmapped] },
+    { file_path: join(tempDir, "elsewhere", "a.ts"), workspace_roots: [mapped] },
+  ]) {
+    const result = await runHook("hooks/post-edit-ingest.ts", payload, env);
+    assert.equal(result.code, 0, result.stderr);
+  }
+
+  await delay(300);
+  assert.deepEqual(await readLogLines(requiredEnv(env, "IX_MOCK_MAP_LOG_FILE")), []);
+  assert.ok(!(await readLogLines(requiredEnv(env, "IX_MOCK_LOG_FILE"))).some((l) => l.startsWith("map ")));
+});
+
+test("stop hook maps each mapped workspace repo once, from the payload's workspace_roots", { concurrency: false }, async (t) => {
+  const tempDir = await realpath(await mkdtemp(join(tmpdir(), "ix-cursor-itest-")));
+  t.after(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  const a = await gitRepo(join(tempDir, "a"));
+  const b = await gitRepo(join(tempDir, "b"));
+  await mkdir(join(a, "pkg"));
+  const plain = join(tempDir, "plain");
+  await mkdir(plain);
+  // CURSOR_PROJECT_DIR is only a fallback; the payload's roots win.
+  const env = fixtureEnv(tempDir, { IX_MOCK_MAPPED_ROOTS: `${a}:${b}:${plain}`, CURSOR_PROJECT_DIR: plain });
+
+  const result = await runHook(
+    "hooks/debounced-map.ts",
+    { status: "completed", loop_count: 0, workspace_roots: [a, join(a, "pkg"), b, plain] },
+    env,
+  );
+  assert.equal(result.code, 0, result.stderr);
+
+  const mapLogPath = requiredEnv(env, "IX_MOCK_MAP_LOG_FILE");
+  const started = Date.now();
+  while ((await readLogLines(mapLogPath)).length < 2 && Date.now() - started < 3_000) {
+    await delay(50);
+  }
+  await delay(300);
+  assert.deepEqual(
+    (await readLogLines(mapLogPath)).sort(),
+    [`path=${a}\tcwd=${a}\tIX_AUTO_MAP=1`, `path=${b}\tcwd=${b}\tIX_AUTO_MAP=1`].sort(),
   );
 });

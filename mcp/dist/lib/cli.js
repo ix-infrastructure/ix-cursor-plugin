@@ -86,6 +86,7 @@ async function runIxFormat(args, format, opts = {}) {
     try {
         const { stdout, stderr } = await execFileAsync(IX_BIN, fullArgs, {
             timeout,
+            ...(opts.cwd ? { cwd: opts.cwd } : {}),
             maxBuffer: 10 * 1024 * 1024,
         });
         if (stderr.trim()) {
