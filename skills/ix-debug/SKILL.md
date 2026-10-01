@@ -45,7 +45,7 @@ Extract: `role.role`, `importance.level`, `facts.callerCount`, `facts.calleeCoun
 Use the Phase 1–2 results to choose the path:
 
 - **Inline path (simple bug):** the likely failure is still within a single subsystem, the role confidence is high, and `facts.calleeCount` ≤ 10 → continue to Phase 4.
-- **Delegate path (complex bug):** role confidence is low, OR `facts.calleeCount` > 10 → use the Agent tool with `subagent_type: "ix-memory:ix-bug-investigator"` and pass the pre-computed context below.
+- **Delegate path (complex bug):** role confidence is low, OR `facts.calleeCount` > 10 → use the Task tool with `subagent_type: "ix-bug-investigator"` and pass the pre-computed context below.
 
 **You MUST pass pre-computed context so the agent skips redundant work.** Launch the agent with:
 
@@ -58,7 +58,7 @@ Use the Phase 1–2 results to choose the path:
 >
 > Start from Step 3. The symptom is: [description]. The entry point classification suggests: [hint from Phase 2].
 
-If the Agent tool is unavailable, continue inline through Phases 4–6, reduce breadth, preserve the 2-read cap, and surface uncertainty rather than over-reading.
+If the Task tool is unavailable, continue inline through Phases 4–6, reduce breadth, preserve the 2-read cap, and surface uncertainty rather than over-reading.
 
 ## Phase 4 — Trace the execution path (inline path)
 
