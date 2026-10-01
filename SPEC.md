@@ -479,10 +479,9 @@ Claude equivalent: `hooks/ix-ingest.sh`
 Cursor behavior:
 
 - Trigger after edit, write, multi-edit, or notebook edit
-- Run `ix_map <file>` or equivalent incremental ingest
+- Never map the edited file: `ix map` takes a directory and rejects a file
+- Request the guarded root map (see F) for the workspace root holding the file
 - Execute asynchronously and non-blocking
-- Retry once on failure
-- Rate-limit repeated hits on the same file
 
 ### E. Stop annotation hook
 
@@ -505,10 +504,14 @@ Claude equivalent: `hooks/ix-map.sh`
 
 Cursor behavior:
 
-- After stop, or after a burst of edits, check debounce state
-- Acquire a lock
-- Run full `ix_map`
-- Skip when recent incremental ingest is sufficient
+- After stop, or after an edit, for each workspace root in the hook payload
+  (fallback `CURSOR_PROJECT_DIR`; never the plugin dir or hook cwd):
+  - root = `git -C <dir> rev-parse --show-toplevel`; skip non-git dirs and `$HOME`
+  - skip unless `ix status --format json --root <root>` reports `graphCompleted: true`
+    (an automatic map never creates a workspace)
+  - debounce per root, stamp in `${XDG_STATE_HOME:-~/.local/state}/ix-cursor-plugin/`
+  - spawn `ix map <root> --silent` detached, cwd = root, `IX_AUTO_MAP=1`
+- No plugin lock: Ix holds its own per-workspace map lock
 
 ## 7. Shared ledger and telemetry
 
