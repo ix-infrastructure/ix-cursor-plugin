@@ -9,7 +9,7 @@ Hooks fire automatically at tool boundaries and inject Ix context into the conve
 
 ### Briefing Deduplication
 
-1. **If briefing context is already present in this turn, do not call `ix_briefing` again.** Injected briefing context appears as a block starting with `[ix briefing]` or similar. Treat it as authoritative for the current turn.
+1. **If briefing context is already present in this turn, do not call `ix_briefing` again.** Injected briefing context appears as a block starting with `[ix] Session briefing:`, added when the conversation starts. Treat it as authoritative for the current turn.
 
 2. **Briefing TTL is 10 minutes.** If the conversation began more than 10 minutes ago and significant new context has been requested, a fresh `ix_briefing` call is appropriate. Otherwise, reuse the injected data.
 
@@ -17,13 +17,13 @@ Hooks fire automatically at tool boundaries and inject Ix context into the conve
 
 ### Search and Locate Deduplication
 
-4. **If a hook already resolved a symbol** (via `[ix]` context block or pre-search injection), do not call `ix_locate` or `ix_text` for the same query in the same turn. Use the resolved result directly.
+4. **If a hook already resolved a symbol** (via an `[ix]` context block added after a Grep or shell search), do not call `ix_locate` or `ix_text` for the same query in the same turn. Use the resolved result directly.
 
 5. **Do not repeat an Ix query that returned a result this turn.** Before calling any Ix tool, check whether the same query was already run and produced output. If it did, use the cached result.
 
 ### Impact Deduplication
 
-6. **If the pre-edit hook already ran `ix_impact` for the file being edited**, do not call `ix_impact` again for the same file in the same turn. The hook result is valid for the duration of the edit.
+6. **If an `[ix]` edit warning already reported `ix_impact` for a file you edited**, do not call `ix_impact` again for the same file in the same turn. Use the reported dependents to check callers.
 
 ### General Rule
 

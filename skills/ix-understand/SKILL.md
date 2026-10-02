@@ -13,7 +13,7 @@ Parse `$ARGUMENTS` before doing anything else:
 - `--deep`: full parallel agent strategy
 - `--save [path]`: if present, set `SAVE_PATH`; path is optional — if absent, auto-generate `ix-understand-<target-slug>.md` in cwd (target slug = `TARGET` with spaces and slashes replaced by `-`, or `repo` if TARGET is empty); if `--save` is not given at all, `SAVE_PATH` is empty.
 
-**MANDATORY for `--medium` and `--deep`: This skill MUST use the Agent tool (subagent_type: "ix-memory:ix-system-explorer") for all exploration work. Do NOT call ix tools yourself except for the Phase 1 orient calls below. All subsystem exploration MUST be delegated to agents.**
+**MANDATORY for `--medium` and `--deep`: This skill MUST use the Task tool (subagent_type: "ix-system-explorer") for all exploration work. Do NOT call ix tools yourself except for the Phase 1 orient calls below. All subsystem exploration MUST be delegated to agents.**
 
 ## Phase 1 — Orient
 
@@ -98,7 +98,7 @@ Count the number of **significant top-level systems** (file count >= 10 or confi
 
 ## Phase 3A — Single agent (--deep, small codebase)
 
-**You MUST use the Agent tool** with `subagent_type: "ix-memory:ix-system-explorer"` here. Do NOT do this work yourself. Launch one agent with:
+**You MUST use the Task tool** with `subagent_type: "ix-system-explorer"` here. Do NOT do this work yourself. Launch one agent with:
 
 > Build a **detailed** architectural mental model of: $TARGET
 >
@@ -119,7 +119,7 @@ Then present the agent's output directly to the user.
 
 ## Phase 3B — Parallel agents (--deep, large codebase)
 
-**You MUST use the Agent tool** with `subagent_type: "ix-memory:ix-system-explorer"` for each system. Launch **ALL agents in a single message** (this runs them in parallel). You must wait for all agents to return before proceeding to Phase 4. Each agent gets:
+**You MUST use the Task tool** with `subagent_type: "ix-system-explorer"` for each system. Launch **ALL agents in a single message** (this runs them in parallel). You must wait for all agents to return before proceeding to Phase 4. Each agent gets:
 
 > Explore the **$SYSTEM_NAME** subsystem in detail.
 >

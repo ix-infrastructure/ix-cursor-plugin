@@ -1,0 +1,4 @@
+[
+  { "path": "src/session/manager.ts", "line": 12, "text": "export class SessionManager {" },
+  { "path": "src/session/index.ts", "line": 3, "text": "export { SessionManager } from \"./manager\";" }
+]

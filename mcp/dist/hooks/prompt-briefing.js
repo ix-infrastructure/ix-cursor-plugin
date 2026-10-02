@@ -1,19 +1,29 @@
 #!/usr/bin/env node
 // Copyright 2026 Ix Infrastructure Inc.
-// Cursor beforeSubmitPrompt hook — injects Ix session briefing once per 10 minutes.
+// Cursor sessionStart hook — injects the Ix session briefing into a new
+// conversation's initial system context.
 //
-// Reads JSON from stdin (prompt payload). Calls ix briefing via the CLI adapter,
-// caches the result for BRIEFING_TTL_MS, and injects a compact context block.
+// Was a beforeSubmitPrompt hook writing `additional_context`, which Cursor
+// ignores there: beforeSubmitPrompt's output is only `continue` and
+// `user_message`. sessionStart's output is `env` and `additional_context`,
+// "additional context to add to the conversation's initial system context".
+// Source: https://cursor.com/docs/hooks (Hook events -> beforeSubmitPrompt,
+// sessionStart). sessionStart does not run in cloud agents (same page, "Hooks
+// not available in cloud agents").
+//
+// Calls ix briefing in the payload's repo and caches it per repo root for
+// BRIEFING_TTL_MS, so sessions opened close together share one ix call.
 //
 // Contract:
-//   exit 0 + JSON stdout → Cursor uses the output
-//   exit 0 + no stdout  → Cursor proceeds silently
-//   never exit non-zero → never block the user prompt
+//   exit 0 + {"additional_context": ...} → briefing added to the session
+//   exit 0 + no stdout                   → nothing added
+//   never exit non-zero
 import { checkHealth, runIx } from "../lib/cli.js";
 import { IX_HOOK_VERBOSITY } from "../lib/config.js";
 import { parseIxJson } from "../lib/parser.js";
 import { gitRoot, projectDirs } from "../shared/auto-map.js";
 import { withCache } from "../shared/cache.js";
+import { readHookInput, writeHookOutput, } from "../shared/hook-io.js";
 import { rootKey } from "../shared/state-dir.js";
 const BRIEFING_TTL_MS = 600_000; // 10 minutes, matches Claude plugin
 // ── Formatting ────────────────────────────────────────────────────────────────
@@ -51,17 +61,10 @@ function formatVerboseBriefing(cache) {
 }
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
-    const chunks = [];
-    for await (const chunk of process.stdin) {
-        chunks.push(chunk);
-    }
-    let workspaceRoots;
-    try {
-        workspaceRoots = JSON.parse(Buffer.concat(chunks).toString("utf8")).workspace_roots;
-    }
-    catch {
-        // No payload — fall back to CURSOR_PROJECT_DIR.
-    }
+    // Input: common fields (workspace_roots) plus session_id, is_background_agent,
+    // composer_mode. A missing payload falls back to CURSOR_PROJECT_DIR.
+    const input = await readHookInput();
+    const workspaceRoots = input?.workspace_roots;
     if (IX_HOOK_VERBOSITY === "silent") {
         process.exit(0);
     }
@@ -110,19 +113,12 @@ async function main() {
     const context = IX_HOOK_VERBOSITY === "verbose"
         ? formatVerboseBriefing(cache)
         : formatBriefing(cache);
-    // Cursor beforeSubmitPrompt response.
-    // `additional_context` is the field used by sessionStart and postToolUse for
-    // context injection; we include it here as the closest equivalent to Claude
-    // Code's `additionalContext`. `continue: true` ensures we never block the prompt.
-    // Note: exact field support in beforeSubmitPrompt needs local verification.
-    process.stdout.write(JSON.stringify({
-        continue: true,
-        additional_context: context,
-    }));
+    const output = { additional_context: context };
+    writeHookOutput(output);
     process.exit(0);
 }
 main().catch(() => {
-    // Any uncaught failure — exit silently, never block the prompt
+    // Any uncaught failure — exit silently
     process.exit(0);
 });
 //# sourceMappingURL=prompt-briefing.js.map

@@ -1,21 +1,39 @@
 #!/usr/bin/env node
 // Copyright 2026 Ix Infrastructure Inc.
 
-// Cursor preToolUse hook (matcher: "Write") — pre-edit impact warning.
+// Cursor postToolUse hook (matcher: "Write") — edit impact warning.
 //
-// Fires before any file write. Calls ix impact on the target file and injects
-// a blast-radius warning when the file has significant dependents.
+// After the agent writes a code file, calls ix impact on it and, when the file
+// has enough dependents, tells the agent its blast radius so it checks callers
+// before moving on.
+//
+// Was a preToolUse hook returning `permission: "allow"` + `agent_message`.
+// Cursor feeds preToolUse's agent_message back only "when the action is
+// denied", so on an allowed write the warning never reached the model.
+// postToolUse's `additional_context` is "injected into the conversation after
+// the tool result". Source: https://cursor.com/docs/hooks (Hook events ->
+// preToolUse, postToolUse; matcher values include `Write`). The warning now
+// lands right after the write instead of before it; the only pre-write channel
+// is a deny, and these warnings are advisory.
 //
 // Contract:
-//   exit 0 + JSON stdout → Cursor uses the output (permission: allow + agent_message)
-//   exit 0 + no stdout  → Cursor proceeds silently
-//   never exit 2        → never block an edit; warnings are advisory only
+//   exit 0 + {"additional_context": ...} → warning shown to the agent
+//   exit 0 + no stdout                   → nothing to say
+//   never blocks: postToolUse has no permission output
 
+import { realpath } from "node:fs/promises";
 import { basename, relative } from "node:path";
 
 import { checkHealth, runIx } from "../lib/cli.js";
 import { IX_HOOK_VERBOSITY } from "../lib/config.js";
 import { parseIxJson } from "../lib/parser.js";
+import {
+  ixRoot,
+  readHookInput,
+  writeHookOutput,
+  type PostToolUseOutput,
+  type ToolHookInput,
+} from "../shared/hook-io.js";
 import { summarizeRisk } from "../shared/summarizers.js";
 
 // ── Skip lists (matches ix-pre-edit.sh) ──────────────────────────────────────
@@ -37,30 +55,6 @@ function shouldSkip(filePath: string): boolean {
   return SKIP_PATTERNS.some((re) => re.test(filePath));
 }
 
-// ── Repo-relative path resolution ────────────────────────────────────────────
-
-function toRelPath(filePath: string, cwd: string): string {
-  const root = process.env["CURSOR_PROJECT_DIR"] ?? cwd;
-  if (filePath.startsWith("/") && root) {
-    const rel = relative(root, filePath);
-    // relative() returns something like "../../outside" for paths outside root
-    if (!rel.startsWith("..")) return rel;
-  }
-  // Already relative, or outside root — use as-is
-  return filePath;
-}
-
-// ── Hook payload types ────────────────────────────────────────────────────────
-
-interface PreToolUsePayload {
-  tool_name?: string;
-  tool_input?: {
-    file_path?: string;
-    path?: string; // some tools use "path" instead of "file_path"
-  };
-  cwd?: string;
-}
-
 // ── ix impact response (subset we need) ──────────────────────────────────────
 
 interface ImpactRaw {
@@ -77,35 +71,32 @@ interface ImpactRaw {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  // Read and parse the hook payload
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk as Buffer);
-  }
+  // tool_input's file path field is not documented for Cursor's Write tool;
+  // accept both spellings.
+  const input = await readHookInput<ToolHookInput<{ file_path?: string; path?: string }>>();
+  if (!input) process.exit(0);
 
-  let payload: PreToolUsePayload = {};
-  try {
-    payload = JSON.parse(Buffer.concat(chunks).toString("utf8")) as PreToolUsePayload;
-  } catch {
-    process.exit(0);
-  }
-
-  const filePath = payload.tool_input?.file_path ?? payload.tool_input?.path ?? "";
-  const cwd = payload.cwd ?? process.env["CURSOR_PROJECT_DIR"] ?? "";
+  const filePath = input.tool_input?.file_path ?? input.tool_input?.path ?? "";
 
   if (!filePath) process.exit(0);
   if (shouldSkip(filePath)) process.exit(0);
   if (IX_HOOK_VERBOSITY === "silent") process.exit(0);
 
+  // Run ix in the repo holding the file; skip files outside every workspace.
+  const root = await ixRoot(input, filePath);
+  if (!root) process.exit(0);
+
   // Health gate
   const healthy = await checkHealth();
   if (!healthy) process.exit(0);
 
-  const relPath = toRelPath(filePath, cwd);
+  // root is canonical (git top level); canonicalise the file the same way.
+  const rel = relative(root, await realpath(filePath).catch(() => filePath));
+  const relPath = rel && !rel.startsWith("..") ? rel : filePath;
   const filename = basename(filePath);
 
   // Call ix impact (9 s budget; hook timeout is 10 s)
-  const result = await runIx(["impact", relPath], { timeout: 9_000 });
+  const result = await runIx(["impact", relPath], { timeout: 9_000, cwd: root });
   // Not `!result.ok`. A non-zero exit is not the same as no answer: `runIx`
   // keeps stdout across a failure, and since ix-infrastructure/Ix#547 a target
   // that is not in the graph exits 1 while still printing its JSON body. Gating
@@ -138,18 +129,13 @@ async function main(): Promise<void> {
   });
   if (!warning) process.exit(0);
 
-  const agentMessage =
+  const context =
     IX_HOOK_VERBOSITY === "verbose"
       ? `${warning}\n\n${JSON.stringify(raw, null, 2)}`
       : warning;
 
-  // Output allow + agent_message. Never deny — warnings are advisory.
-  process.stdout.write(
-    JSON.stringify({
-      permission: "allow",
-      agent_message: agentMessage,
-    }),
-  );
+  const output: PostToolUseOutput = { additional_context: context };
+  writeHookOutput(output);
 
   process.exit(0);
 }
