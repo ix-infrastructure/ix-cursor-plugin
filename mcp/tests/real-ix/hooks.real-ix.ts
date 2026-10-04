@@ -49,6 +49,9 @@ writeFileSync(
   "export function resolveWidgetConfig(name: string) {\n  return { name };\n}\n",
 );
 writeFileSync(join(PROJ, "use.ts"), 'import { resolveWidgetConfig } from "./widget";\nresolveWidgetConfig("a");\n');
+// A subdirectory, so a Grep scoped to it makes pre-search pass `ix text --path`.
+mkdirSync(join(PROJ, "lib"));
+writeFileSync(join(PROJ, "lib", "note.ts"), "export const note = 1;\n");
 
 const BASE_ENV: Record<string, string> = {
   PATH: process.env["PATH"] ?? "",
@@ -154,6 +157,17 @@ test("postToolUse Grep, unmapped: locate's error record is no answer, ripgrep hi
   assert.match(r.log, /CMD ix locate resolveWidgetConfig --format json/);
 });
 
+test("postToolUse Grep with path and type: pre-search passes ix text --path and --language", async () => {
+  const r = await runHook("pre-search", "postToolUse", {
+    tool_name: "Grep",
+    tool_input: { pattern: "resolveWidgetConfig", path: join(PROJ, "lib"), type: "ts" },
+    cwd: PROJ,
+  });
+  assert.equal(r.code, 0);
+  if (r.stdout) assertOutputFields("postToolUse", JSON.parse(r.stdout) as Record<string, unknown>);
+  assert.match(r.log, /CMD ix text resolveWidgetConfig --limit 15 --path lib --language ts\b/);
+});
+
 test("postToolUse Write, unmapped: impact's exit-1 error body is parsed and stays silent", async () => {
   const r = await runHook("edit-impact", "postToolUse", {
     tool_name: "Write",
@@ -218,10 +232,13 @@ test("every ix argv the plugin builds is accepted by this CLI (no unknown option
     ["status", "--format", "json", "--root", PROJ],
     ["map", PROJ, "--silent"],
   ];
-  // Plus the optional Grep filters pre-search adds when Cursor passes them.
-  const optional = [["text", "resolveWidgetConfig", "--limit", "15", "--path", ".", "--language", "typescript", "--format", "json"]];
+  // The optional Grep filters must be among what the hooks ran, so they are
+  // checked as pre-search builds them, not as this file spells them.
+  for (const flag of ["--path", "--language"]) {
+    assert.ok(ran.some((a) => a[0] === "text" && a.includes(flag)), `a hook ran ix text ${flag}`);
+  }
   const rejected: string[] = [];
-  for (const args of [...ran, ...autoMap, ...optional]) {
+  for (const args of [...ran, ...autoMap]) {
     const r = ix(args);
     if (/unknown (option|command)|too many arguments|missing required argument/i.test(r.stderr)) {
       rejected.push(`ix ${args.join(" ")}\n    ${r.stderr.trim().split("\n")[0]}`);
