@@ -77,8 +77,8 @@ jobs:
   # next runs install.sh's build path. tsx is also what executes the test
   # suite, and it is not in the ignore list.
   #
-  # typecheck + build only. `npm test` is deliberately NOT run here: its
-  # integration tests drive a POSIX mock `ix` and are a separate piece of work.
+  # Also runs `npm test`. Its integration tests drive the POSIX mock `ix` in
+  # tests/fixtures/bin, a bash script, which is why this job stays on Linux.
   mcp:
     name: mcp build
     runs-on: ubuntu-latest
@@ -144,6 +144,67 @@ jobs:
           fi
         working-directory: mcp
 
+      - name: Test
+        run: npm test
+        working-directory: mcp
+
+  # ── Hooks against a released ix ───────────────────────────────────────────
+  # `npm test` checks the hooks against output we wrote into a mock. This job
+  # runs the committed hooks (the hooks.json commands, node mcp/dist/...) with
+  # a pinned RELEASED ix on PATH and no backend: IX_ENDPOINT is a port nothing
+  # answers on. tests/real-ix asserts the hooks parse ix's real error records,
+  # survive its unreachable-backend failures, answer in Cursor's hook protocol,
+  # and that this CLI accepts every flag the plugin passes it, so pinning to a
+  # CLI that lacks one turns this job red. Bump IX_VERSION deliberately.
+  real-ix:
+    name: real ix
+    runs-on: ubuntu-latest
+    env:
+      IX_VERSION: "0.12.0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The ix launcher needs Node 22+.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mcp/package-lock.json
+
+      # `ix text` shells out to ripgrep.
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+
+      - name: Install ix ${{ env.IX_VERSION }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/ix-cli"
+          file="ix-${IX_VERSION}-linux-amd64.tar.gz"
+          base="https://github.com/ix-infrastructure/Ix/releases/download/v${IX_VERSION}"
+          mkdir -p "$dir"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "$base/$file"
+          curl -fsSLO "$base/$file.sha256"
+          sha256sum -c "$file.sha256"
+          tar -xzf "$file" -C "$dir" --strip-components=1
+          echo "$dir" >> "$GITHUB_PATH"
+
+      - name: Install
+        run: npm ci
+        working-directory: mcp
+
+      - name: Hooks against real ix
+        env:
+          IX_ENDPOINT: http://127.0.0.1:1
+          IX_NO_UPDATE_CHECK: "1"
+          IX_EXPECTED_VERSION: ${{ env.IX_VERSION }}
+        run: |
+          ix --version
+          npm run test:real-ix
+        working-directory: mcp
+
   # ── Aggregate gate ───────────────────────────────────────────────────────
   # One stable required-status-check context. Fails if validate failed OR was
   # skipped/cancelled, so the job graph can be reshaped without orphaning the
@@ -151,12 +212,14 @@ jobs:
   ci-success:
     name: CI Passed
     if: always()
-    needs: [validate, mcp]
+    needs: [validate, mcp, real-ix]
     runs-on: ubuntu-latest
     steps:
       - name: Verify all required jobs succeeded
         run: |
           echo "validate=${{ needs.validate.result }}"
           echo "mcp=${{ needs.mcp.result }}"
+          echo "real-ix=${{ needs.real-ix.result }}"
           [ "${{ needs.validate.result }}" = "success" ]
           [ "${{ needs.mcp.result }}" = "success" ]
+          [ "${{ needs.real-ix.result }}" = "success" ]
