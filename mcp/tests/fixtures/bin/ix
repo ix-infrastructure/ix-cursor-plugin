@@ -118,6 +118,12 @@ case "${SUBCOMMAND}" in
     else
       printf '{}\n'
     fi
+    # Like IX_MOCK_IMPACT_EXIT: since Ix#853 a graph lookup prints its record
+    # on stdout and exits 2 (ambiguous), 3 (not found) or 4 (workspace not
+    # mapped); before that, all of them exited 1.
+    if [ "${SUBCOMMAND}" = "locate" ]; then
+      exit "${IX_MOCK_LOCATE_EXIT:-0}"
+    fi
     ;;
   text)
     # `ix text <term> [--limit n] [--path dir] [--language l] [--format f]`;

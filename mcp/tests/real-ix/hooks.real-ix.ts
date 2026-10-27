@@ -168,7 +168,7 @@ test("postToolUse Grep with path and type: pre-search passes ix text --path and 
   assert.match(r.log, /CMD ix text resolveWidgetConfig --limit 15 --path lib --language ts\b/);
 });
 
-test("postToolUse Write, unmapped: impact's exit-1 error body is parsed and stays silent", async () => {
+test("postToolUse Write, unmapped: impact's non-zero error body is parsed and stays silent", async () => {
   const r = await runHook("edit-impact", "postToolUse", {
     tool_name: "Write",
     tool_input: { file_path: join(PROJ, "widget.ts") },

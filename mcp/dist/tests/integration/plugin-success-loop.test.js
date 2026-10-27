@@ -1,6 +1,6 @@
 // Copyright 2026 Ix Infrastructure Inc.
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -288,6 +288,155 @@ test("shell grep gets graph context after the command runs, in the command's rep
     assert.match(context, /bash grep intercepted for 'SessionManager'/);
     assert.match(context, /symbol: SessionManager/);
     await waitForLogLine(requiredEnv(env, "IX_MOCK_LOG_FILE"), `locate SessionManager --format json\tcwd=${repo}`);
+});
+// ── Ix#853 exit codes ─────────────────────────────────────────────────────────
+//
+// Since ix-infrastructure/Ix#853 a graph lookup (locate, impact, ...) that has
+// no answer exits 2 (ambiguous target), 3 (not found) or 4 (workspace not
+// mapped), still with its record on stdout; before, all of them exited 1. The
+// hooks read stdout and never the exit code, so for any body, exits 2-4 must
+// produce exactly what exit 1 produces. These pin that.
+const LOOKUP_EXITS = [2, 3, 4];
+/** The records ix prints for each refusal. `locate` reports ambiguity under `code`, not `error`. */
+function refusalBodies(command, target) {
+    const ambiguityKey = command === "locate" ? "code" : "error";
+    return [
+        {
+            name: "ambiguous_target",
+            body: {
+                [ambiguityKey]: "ambiguous_target",
+                message: `"${target}" matches more than one entity.`,
+                candidates: [
+                    { id: "e1", name: target, kind: "class", path: "src/session/manager.ts" },
+                    { id: "e2", name: target, kind: "interface", path: "src/session/types.ts" },
+                ],
+            },
+        },
+        {
+            name: "unresolved_target",
+            body: {
+                error: "unresolved_target",
+                message: `No entity resolved for "${target}".`,
+                suggestions: [{ id: "e3", name: `${target}Impl`, kind: "class", path: "src/session/impl.ts" }],
+            },
+        },
+        {
+            name: "workspace_not_mapped",
+            body: { error: "workspace_not_mapped", message: "This workspace is not mapped. Run `ix map` first." },
+        },
+    ];
+}
+async function writeBodies(tempDir, command, target, usable) {
+    const files = [{ name: "usable body", file: usable }];
+    for (const { name, body } of refusalBodies(command, target)) {
+        const file = join(tempDir, `${command}-${name}.json`);
+        await writeFile(file, `${JSON.stringify(body, null, 2)}\n`);
+        files.push({ name, file });
+    }
+    return files;
+}
+/** Guards against a vacuous pass: the stub really exits with the code the test asked for. */
+function assertStubExits(subcommand, env, code) {
+    const { IX_MOCK_LOG_FILE: _log, ...quiet } = env;
+    const r = spawnSync(MOCK_IX_PATH, [subcommand, "x", "--format", "json"], {
+        env: { ...process.env, ...quiet },
+        encoding: "utf8",
+    });
+    assert.equal(r.status, code, `mock ix ${subcommand} should exit ${code}: ${r.stderr}`);
+    assert.ok(r.stdout.trim(), `mock ix ${subcommand} still prints its body on exit ${code}`);
+}
+/**
+ * Runs `run` at exit 1 and at each of exits 2-4 and asserts identical hook
+ * output. Returns the exit-1 output so the caller can check what it is.
+ */
+async function assertExitsAnswerLikeExit1(subcommand, envAt, run) {
+    assertStubExits(subcommand, envAt(1), 1);
+    const baseline = await run(envAt(1));
+    for (const exit of LOOKUP_EXITS) {
+        assertStubExits(subcommand, envAt(exit), exit);
+        assert.deepEqual(await run(envAt(exit)), baseline, `exit ${exit} must answer as exit 1 does`);
+    }
+    return baseline;
+}
+test("edit-impact answers ix exits 2, 3 and 4 exactly as exit 1 with the same body", { concurrency: false }, async (t) => {
+    const { tempDir, repo, file } = await editFixture(t);
+    const bodies = await writeBodies(tempDir, "impact", "shared.ts", join(FIXTURE_DIR, "impact_high.json"));
+    for (const { name, file: body } of bodies) {
+        const envAt = (exit) => fixtureEnv(tempDir, { IX_MOCK_IMPACT_FILE: body, IX_MOCK_IMPACT_EXIT: String(exit) });
+        const outputs = await assertExitsAnswerLikeExit1("impact", envAt, (env) => runRegistered("edit-impact", writeInput(file, repo), env, [repo]));
+        if (name === "usable body") {
+            assert.match(modelVisibleText("postToolUse", outputs.get("postToolUse")), /HIGH-RISK EDIT/, name);
+        }
+        else {
+            assert.deepEqual(outputs.get("postToolUse"), {}, `${name} is not a risk warning`);
+        }
+    }
+    // The silent cases are silent because of the body, not because ix never ran.
+    await waitForLogLine(requiredEnv(fixtureEnv(tempDir), "IX_MOCK_LOG_FILE"), `impact src/shared.ts --format json\tcwd=${repo}`);
+});
+function assertSearchContext(name, context) {
+    // ix text is not a graph lookup and still answers; only locate refuses.
+    assert.match(context, /2 text hits in manager\.ts, index\.ts/, name);
+    switch (name) {
+        case "usable body":
+            assert.match(context, /symbol: SessionManager, class, manager\.ts/, name);
+            break;
+        case "ambiguous_target":
+            assert.match(context, /candidates: SessionManager \(class\), SessionManager \(interface\)/, name);
+            break;
+        default:
+            assert.doesNotMatch(context, /symbol:|candidates:|unresolved_target|workspace_not_mapped/, name);
+    }
+}
+test("Grep hook answers ix locate exits 2, 3 and 4 exactly as exit 1 with the same body", { concurrency: false }, async (t) => {
+    const tempDir = await realpath(await mkdtemp(join(tmpdir(), "ix-cursor-itest-")));
+    t.after(async () => {
+        await rm(tempDir, { recursive: true, force: true });
+    });
+    const repo = await gitRepo(join(tempDir, "repo"));
+    const bodies = await writeBodies(tempDir, "locate", "SessionManager", join(FIXTURE_DIR, "locate_resolved.json"));
+    const grep = () => ({
+        tool_name: "Grep",
+        tool_input: { pattern: "SessionManager" },
+        tool_use_id: "tu-4",
+        cwd: repo,
+    });
+    for (const { name, file: body } of bodies) {
+        // Blocking on, so preToolUse consults ix too rather than exiting first.
+        const envAt = (exit) => fixtureEnv(tempDir, {
+            IX_MOCK_LOCATE_FILE: body,
+            IX_MOCK_LOCATE_EXIT: String(exit),
+            IX_BLOCK_ON_HIGH_CONFIDENCE: "true",
+        });
+        const outputs = await assertExitsAnswerLikeExit1("locate", envAt, (env) => runRegistered("pre-search", grep, env, [repo]));
+        assertSearchContext(name, modelVisibleText("postToolUse", outputs.get("postToolUse")));
+        if (name === "usable body") {
+            assert.equal(outputs.get("preToolUse")["permission"], "deny", name);
+        }
+        else {
+            assert.deepEqual(outputs.get("preToolUse"), {}, `${name} must not block the Grep`);
+        }
+    }
+});
+test("shell grep hook answers ix locate exits 2, 3 and 4 exactly as exit 1 with the same body", { concurrency: false }, async (t) => {
+    const tempDir = await realpath(await mkdtemp(join(tmpdir(), "ix-cursor-itest-")));
+    t.after(async () => {
+        await rm(tempDir, { recursive: true, force: true });
+    });
+    const repo = await gitRepo(join(tempDir, "repo"));
+    const bodies = await writeBodies(tempDir, "locate", "SessionManager", join(FIXTURE_DIR, "locate_resolved.json"));
+    const shell = () => ({
+        tool_name: "Shell",
+        tool_input: { command: "rg SessionManager src", working_directory: repo },
+        tool_output: "{\"exitCode\":0}",
+        tool_use_id: "tu-5",
+        cwd: repo,
+    });
+    for (const { name, file: body } of bodies) {
+        const envAt = (exit) => fixtureEnv(tempDir, { IX_MOCK_LOCATE_FILE: body, IX_MOCK_LOCATE_EXIT: String(exit) });
+        const outputs = await assertExitsAnswerLikeExit1("locate", envAt, (env) => runRegistered("shell-search", shell, env, [repo]));
+        assertSearchContext(name, modelVisibleText("postToolUse", outputs.get("postToolUse")));
+    }
 });
 test("post-edit hook requests the guarded root map and a follow-up query sees the updated graph", { concurrency: false }, async (t) => {
     const tempDir = await realpath(await mkdtemp(join(tmpdir(), "ix-cursor-itest-")));
