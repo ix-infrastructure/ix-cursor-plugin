@@ -25,6 +25,7 @@ import { promisify } from "node:util";
 
 import { IX_BIN } from "../lib/config.js";
 import { stripHeader } from "../lib/cli.js";
+import { ixLaunch } from "../lib/launch.js";
 import { ensureStateDir, rootKey } from "./state-dir.js";
 
 const execFileAsync = promisify(execFile);
@@ -71,10 +72,13 @@ export async function gitRoot(dir: string): Promise<string | null> {
 /** True only when `ix status` says the root's graph is complete. */
 export async function isMapped(root: string, ixBin: string): Promise<boolean> {
   try {
-    const { stdout } = await execFileAsync(ixBin, ["status", "--format", "json", "--root", root], {
+    const launch = await ixLaunch(ixBin, ["status", "--format", "json", "--root", root]);
+    const { stdout } = await execFileAsync(launch.file, launch.args, {
       cwd: root,
       timeout: STATUS_TIMEOUT_MS,
       maxBuffer: 1024 * 1024,
+      windowsHide: true,
+      windowsVerbatimArguments: launch.windowsVerbatimArguments,
     });
     const parsed = JSON.parse(stripHeader(stdout)) as { graphCompleted?: unknown };
     return parsed.graphCompleted === true;
@@ -125,11 +129,15 @@ export async function requestAutoMap(
   if (!(await isMapped(root, ixBin))) return "not-mapped";
 
   try {
-    const child = spawn(ixBin, ["map", root, "--silent"], {
+    const launch = await ixLaunch(ixBin, ["map", root, "--silent"]);
+    const child = spawn(launch.file, launch.args, {
       cwd: root,
       env: { ...process.env, IX_AUTO_MAP: "1" },
       detached: true,
       stdio: "ignore",
+      // detached on Windows would otherwise open a console window.
+      windowsHide: true,
+      windowsVerbatimArguments: launch.windowsVerbatimArguments,
     });
     child.on("error", () => { /* ix vanished between status and map */ });
     child.unref();

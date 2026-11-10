@@ -6,6 +6,7 @@ import { appendFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { IX_BIN, IX_DEBUG_LOG, timeoutFor } from "./config.js";
 import { IxError } from "./errors.js";
+import { findExecutable, ixLaunch } from "./launch.js";
 import { withCache } from "../shared/cache.js";
 
 const execFileAsync = promisify(execFile);
@@ -59,7 +60,9 @@ const HEALTH_TTL_MS = 300_000;
 export async function checkHealth(): Promise<boolean> {
   try {
     await withCache("health", HEALTH_TTL_MS, async () => {
-      await execFileAsync("command", ["-v", IX_BIN], { shell: true, timeout: 3000 });
+      // A PATH lookup, not `command -v`: that is a POSIX shell builtin and the
+      // default shell on Windows is cmd.exe. Not found throws, so it is not cached.
+      if (!(await findExecutable(IX_BIN))) throw new Error(`${IX_BIN} not found on PATH`);
       return true;
     });
     return true;
@@ -128,10 +131,13 @@ async function runIxFormat(
   const clean = (raw: string): string => (format === "json" ? stripHeader(raw) : raw);
 
   try {
-    const { stdout, stderr } = await execFileAsync(IX_BIN, fullArgs, {
+    const launch = await ixLaunch(IX_BIN, fullArgs);
+    const { stdout, stderr } = await execFileAsync(launch.file, launch.args, {
       timeout,
       ...(opts.cwd ? { cwd: opts.cwd } : {}),
       maxBuffer: 10 * 1024 * 1024,
+      windowsHide: true,
+      windowsVerbatimArguments: launch.windowsVerbatimArguments,
     });
 
     if (stderr.trim()) {

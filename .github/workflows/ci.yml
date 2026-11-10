@@ -210,6 +210,34 @@ jobs:
           npm run test:real-ix
         working-directory: mcp
 
+  # ── Hooks on native Windows ───────────────────────────────────────────────
+  # The Ix installer puts `ix.cmd` on PATH, which Node cannot start without
+  # cmd.exe. tests/unit/launch.test.ts writes a fake ix.cmd that forwards %*
+  # to node, the way an installed launcher does, and drives checkHealth, runIx
+  # and auto-map through it, including arguments with & | " and %. Only that
+  # file runs here: the rest of `npm test` drives the bash mock `ix`.
+  windows:
+    name: mcp on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mcp/package-lock.json
+
+      - name: Install
+        run: npm ci
+        working-directory: mcp
+
+      - name: Launch tests against a fake ix.cmd
+        run: npm run test:windows
+        working-directory: mcp
+
   # ── Aggregate gate ───────────────────────────────────────────────────────
   # One stable required-status-check context. Fails if validate failed OR was
   # skipped/cancelled, so the job graph can be reshaped without orphaning the
@@ -217,7 +245,7 @@ jobs:
   ci-success:
     name: CI Passed
     if: always()
-    needs: [validate, mcp, real-ix]
+    needs: [validate, mcp, real-ix, windows]
     runs-on: ubuntu-latest
     steps:
       - name: Verify all required jobs succeeded
@@ -225,6 +253,8 @@ jobs:
           echo "validate=${{ needs.validate.result }}"
           echo "mcp=${{ needs.mcp.result }}"
           echo "real-ix=${{ needs.real-ix.result }}"
+          echo "windows=${{ needs.windows.result }}"
           [ "${{ needs.validate.result }}" = "success" ]
           [ "${{ needs.mcp.result }}" = "success" ]
           [ "${{ needs.real-ix.result }}" = "success" ]
+          [ "${{ needs.windows.result }}" = "success" ]
