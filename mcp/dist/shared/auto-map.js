@@ -20,6 +20,7 @@ import { isAbsolute, join, relative, sep } from "node:path";
 import { promisify } from "node:util";
 import { IX_BIN } from "../lib/config.js";
 import { stripHeader } from "../lib/cli.js";
+import { ixLaunch } from "../lib/launch.js";
 import { ensureStateDir, rootKey } from "./state-dir.js";
 const execFileAsync = promisify(execFile);
 export const AUTO_MAP_DEBOUNCE_MS = 300_000; // 5 minutes per root
@@ -49,10 +50,13 @@ export async function gitRoot(dir) {
 /** True only when `ix status` says the root's graph is complete. */
 export async function isMapped(root, ixBin) {
     try {
-        const { stdout } = await execFileAsync(ixBin, ["status", "--format", "json", "--root", root], {
+        const launch = await ixLaunch(ixBin, ["status", "--format", "json", "--root", root]);
+        const { stdout } = await execFileAsync(launch.file, launch.args, {
             cwd: root,
             timeout: STATUS_TIMEOUT_MS,
             maxBuffer: 1024 * 1024,
+            windowsHide: true,
+            windowsVerbatimArguments: launch.windowsVerbatimArguments,
         });
         const parsed = JSON.parse(stripHeader(stdout));
         return parsed.graphCompleted === true;
@@ -98,11 +102,15 @@ export async function requestAutoMap(projectDir, opts = {}) {
         // A missing stamp only means the next request is not debounced.
     }
     try {
-        const child = spawn(ixBin, ["map", root, "--silent"], {
+        const launch = await ixLaunch(ixBin, ["map", root, "--silent"]);
+        const child = spawn(launch.file, launch.args, {
             cwd: root,
             env: { ...process.env, IX_AUTO_MAP: "1" },
             detached: true,
             stdio: "ignore",
+            // detached on Windows would otherwise open a console window.
+            windowsHide: true,
+            windowsVerbatimArguments: launch.windowsVerbatimArguments,
         });
         child.on("error", () => { });
         child.unref();
