@@ -111,7 +111,8 @@ test("no step probes for Pro by calling ix_briefing and reading its result", () 
 
 test("no text promises prose that ix_explain's llm output drops", () => {
   // The llm renderer omits the explanation and why-it-matters text; it prints
-  // role, importance and edges records plus caller rows.
+  // role, importance and edges records plus callers as `uses` records with
+  // rel=caller.
   const hits = lines()
     .filter((l) => /why-it-matters|`ix_explain` explanation/i.test(l.text))
     .map(where);
@@ -129,4 +130,24 @@ test("impact guidance names the records ix_impact prints", () => {
     const text = readFileSync(join(PLUGIN_ROOT, file), "utf8");
     for (const rec of ["`risk=`", "`callers=`", "`dependents=`"]) assert.ok(text.includes(rec), `${file} should name ${rec}`);
   }
+});
+
+test("docs-mode names ix_explain's caller records as the CLI prints them", () => {
+  // The llm renderer emits callers as `uses` records with rel=caller, not as
+  // a separate "caller rows" block.
+  const text = readFileSync(join(PLUGIN_ROOT, "rules/docs-mode.mdc"), "utf8");
+  assert.ok(!/caller rows/i.test(text), "docs-mode should not say \"caller rows\"");
+  assert.ok(text.includes("`uses` records with `rel=caller`"), "docs-mode should name `uses` records with `rel=caller`");
+});
+
+test("SPEC.md tool contract lists every tool that returns JSON", () => {
+  // ix_smells always runs `ix smells --format json`; ix_context returns JSON
+  // when structured: true. The rest of the JSON list is map, ingest and Pro.
+  const spec = readFileSync(join(PLUGIN_ROOT, "SPEC.md"), "utf8");
+  const contract = spec.split("\n").find((l) => l.startsWith("Most tools run their `ix` command"));
+  assert.ok(contract, "SPEC.md should state the tool contract");
+  for (const tool of ["ix_map", "ix_ingest", "ix_smells", "ix_context", "ix_briefing", "ix_decisions", "ix_decide"]) {
+    assert.ok(contract.includes(`\`${tool}\``), `tool contract should name ${tool} as returning JSON`);
+  }
+  assert.ok(contract.includes("structured: true"), "tool contract should say ix_context returns JSON only when structured: true");
 });

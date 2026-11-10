@@ -15,7 +15,7 @@ When the task is documentation — writing, updating, or generating docs for a c
    - `ix_stats` — confirm scope (file count, symbol counts)
    - `ix_overview <target>` — get the structural summary of the specific target
 
-2. **Explain before reading.** Call `ix_explain` for any symbol that needs a narrative description. Its llm output carries structured records, not prose: the symbol's role, its importance, its edges, and the caller rows. Write the narrative yourself from those records.
+2. **Explain before reading.** Call `ix_explain` for any symbol that needs a narrative description. Its llm output carries structured records, not prose: the symbol's role, its importance, its edges, and its callers as `uses` records with `rel=caller`. Write the narrative yourself from those records.
 
 3. **Use `ix_decisions` for rationale when it is available.** `ix mcp` lists it only when Ix Pro is installed. Architecture decisions contain the "why" that source code does not. When the tool is available, always query it when writing design rationale or architecture docs.
 
@@ -35,6 +35,6 @@ When the task is documentation — writing, updating, or generating docs for a c
 For narrative documentation:
 1. Purpose (from the role record in `ix_explain`)
 2. Where it fits (from `ix_subsystems` and `ix_overview`)
-3. Key relationships (from the edges record and caller rows in `ix_explain`)
+3. Key relationships (from the edges record and the `uses` records with `rel=caller` in `ix_explain`)
 4. Why it matters (from the importance record in `ix_explain`, and `ix_decisions` when it is available)
 5. Code example (from `ix_read`, only if needed)
