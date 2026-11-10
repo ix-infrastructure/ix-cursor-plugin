@@ -85,6 +85,12 @@ case "${SUBCOMMAND}" in
     exit 0
     ;;
   status)
+    # IX_MOCK_STATUS_EXIT=<n> stands in for an unreachable backend: no JSON,
+    # an error on stderr, exit <n>.
+    if [ -n "${IX_MOCK_STATUS_EXIT:-}" ]; then
+      printf 'error: backend unreachable\n' >&2
+      exit "${IX_MOCK_STATUS_EXIT}"
+    fi
     # graphCompleted is true only for roots listed (colon-separated) in
     # IX_MOCK_MAPPED_ROOTS, so an unmapped repo is the default.
     status_root=""
