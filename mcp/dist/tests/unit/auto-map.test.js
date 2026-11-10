@@ -17,6 +17,7 @@ const ENV_KEYS = [
     "IX_MOCK_MAP_LOG_FILE",
     "IX_MOCK_LOG_FILE",
     "IX_MOCK_STATE_FILE",
+    "IX_MOCK_STATUS_EXIT",
     "IX_AUTO_MAP",
     "CURSOR_PROJECT_DIR",
 ];
@@ -39,6 +40,7 @@ async function sandbox(t, mapped = []) {
     process.env["IX_MOCK_LOG_FILE"] = box.callLog;
     process.env["IX_MOCK_MAPPED_ROOTS"] = mapped.join(":");
     delete process.env["IX_MOCK_STATE_FILE"];
+    delete process.env["IX_MOCK_STATUS_EXIT"];
     delete process.env["IX_AUTO_MAP"];
     await mkdir(process.env["HOME"], { recursive: true });
     return box;
@@ -71,6 +73,9 @@ async function assertNoMap(box) {
     await delay(300);
     assert.deepEqual(await lines(box.mapLog), []);
 }
+async function statusCalls(box) {
+    return (await lines(box.callLog)).filter((l) => l.startsWith("status "));
+}
 function mapLine(root) {
     return `path=${root}\tcwd=${root}\tIX_AUTO_MAP=1`;
 }
@@ -102,6 +107,32 @@ test("an ix status failure counts as not mapped", async (t) => {
     const repo = await gitRepo(join(box.dir, "repo"));
     process.env["IX_MOCK_MAPPED_ROOTS"] = repo;
     assert.equal(await requestAutoMap(repo, { ixBin: join(box.dir, "no-such-ix") }), "not-mapped");
+    await assertNoMap(box);
+});
+test("an unmapped repo is asked ix status at most once per debounce window", async (t) => {
+    const box = await sandbox(t);
+    const repo = await gitRepo(join(box.dir, "repo"));
+    const now = Date.now();
+    assert.equal(await requestAutoMap(repo, { ixBin: MOCK_IX, now }), "not-mapped");
+    assert.equal(await requestAutoMap(repo, { ixBin: MOCK_IX, now: now + 1 }), "debounced");
+    assert.equal(await requestAutoMap(repo, { ixBin: MOCK_IX, now: now + AUTO_MAP_DEBOUNCE_MS - 1 }), "debounced");
+    assert.deepEqual(await statusCalls(box), [`status --format json --root ${repo}`]);
+    // Once the window has passed it is asked again, and a repo mapped meanwhile
+    // gets its refresh.
+    process.env["IX_MOCK_MAPPED_ROOTS"] = repo;
+    assert.equal(await requestAutoMap(repo, { ixBin: MOCK_IX, now: now + AUTO_MAP_DEBOUNCE_MS }), "spawned");
+    assert.equal((await statusCalls(box)).length, 2);
+    assert.deepEqual(await waitForLines(box.mapLog, 1), [mapLine(repo)]);
+});
+test("an unreachable backend is asked ix status at most once per debounce window", async (t) => {
+    const box = await sandbox(t);
+    const repo = await gitRepo(join(box.dir, "repo"));
+    process.env["IX_MOCK_MAPPED_ROOTS"] = repo;
+    process.env["IX_MOCK_STATUS_EXIT"] = "1";
+    const now = Date.now();
+    assert.equal(await requestAutoMap(repo, { ixBin: MOCK_IX, now }), "not-mapped");
+    assert.equal(await requestAutoMap(repo, { ixBin: MOCK_IX, now: now + 1 }), "debounced");
+    assert.deepEqual(await statusCalls(box), [`status --format json --root ${repo}`]);
     await assertNoMap(box);
 });
 test("a mapped repo gets exactly `ix map <root> --silent`, cwd root, IX_AUTO_MAP=1", async (t) => {

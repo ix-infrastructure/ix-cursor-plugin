@@ -6,12 +6,14 @@
 //   1. The project dir (from the Cursor hook payload, never the plugin dir or
 //      the hook process cwd) is inside a git repo, and that repo's top level is
 //      not $HOME.
-//   2. The repo is already mapped: `ix status --format json --root <root>`
+//   2. This root was not checked within the debounce window. The stamp lives
+//      in the per-user state dir, keyed by a hash of the root, and is written
+//      before step 3, so an unmapped repo or a down backend is asked at most
+//      once per window. Ix holds its own per-workspace map lock, so there is
+//      no plugin lock.
+//   3. The repo is already mapped: `ix status --format json --root <root>`
 //      reports `graphCompleted: true`. An automatic refresh never creates a
 //      workspace; any failure, timeout or non-JSON answer means "skip".
-//   3. No automatic map was requested for this root within the debounce window.
-//      The stamp lives in the per-user state dir, keyed by a hash of the root.
-//      Ix holds its own per-workspace map lock, so there is no plugin lock.
 // Then it spawns `ix map <root> --silent` detached, cwd = root, with
 // IX_AUTO_MAP=1 so Ix skips the automatic map against a remote backend.
 
@@ -111,14 +113,16 @@ export async function requestAutoMap(
   const debounceMs = opts.debounceMs ?? AUTO_MAP_DEBOUNCE_MS;
   if (now - (await lastRequest(root)) < debounceMs) return "debounced";
 
-  const ixBin = opts.ixBin ?? IX_BIN;
-  if (!(await isMapped(root, ixBin))) return "not-mapped";
-
+  // Stamp before asking, so an unmapped project or a down backend is asked at
+  // most once per window too, not on every edit and stop.
   try {
     await writeFile(await debounceFile(root), String(now), { encoding: "utf8", mode: 0o600 });
   } catch {
     // A missing stamp only means the next request is not debounced.
   }
+
+  const ixBin = opts.ixBin ?? IX_BIN;
+  if (!(await isMapped(root, ixBin))) return "not-mapped";
 
   try {
     const child = spawn(ixBin, ["map", root, "--silent"], {
