@@ -503,9 +503,11 @@ Cursor behavior:
 - After stop, or after an edit, for each workspace root in the hook payload
   (fallback `CURSOR_PROJECT_DIR`; never the plugin dir or hook cwd):
   - root = `git -C <dir> rev-parse --show-toplevel`; skip non-git dirs and `$HOME`
+  - debounce per root, stamp in `${XDG_STATE_HOME:-~/.local/state}/ix-cursor-plugin/`,
+    written before asking `ix status`, so an unmapped repo or a down backend is
+    asked at most once per window
   - skip unless `ix status --format json --root <root>` reports `graphCompleted: true`
     (an automatic map never creates a workspace)
-  - debounce per root, stamp in `${XDG_STATE_HOME:-~/.local/state}/ix-cursor-plugin/`
   - spawn `ix map <root> --silent` detached, cwd = root, `IX_AUTO_MAP=1`
 - No plugin lock: Ix holds its own per-workspace map lock
 
