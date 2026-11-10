@@ -212,10 +212,13 @@ test("backend unreachable: every hook exits 0 and answers in Cursor's protocol",
     const r = await runHook(script, event, payload);
     assert.deepEqual([r.code, r.stdout], [0, ""], `${script}`);
   }
-  // These payloads carry no workspace_roots and CURSOR_PROJECT_DIR is unset, so
-  // both hooks stop before the auto-map guard: no stamp, no `ix status`, no map.
+  // `ix status` cannot confirm the graph, so no automatic map is requested. The
+  // root is stamped once before asking, so it is asked at most once per window:
+  // the second hook is debounced and writes no further stamp.
   const stamps = join(STATE, "ix-cursor-plugin", "auto-map");
-  assert.deepEqual(existsSync(stamps) ? readdirSync(stamps) : [], [], "no auto-map debounce stamp written");
+  const written = existsSync(stamps) ? readdirSync(stamps) : [];
+  assert.equal(written.length, 1, `one auto-map debounce stamp for the one root (${written.join(", ")})`);
+  assert.match(written[0]!, /^[0-9a-f]+\.stamp$/, "the stamp is keyed by the root");
 });
 
 test("every ix argv the plugin builds is accepted by this CLI (no unknown option)", () => {
