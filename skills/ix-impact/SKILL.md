@@ -30,7 +30,7 @@ Call both in parallel:
 
 This caveat applies regardless of the `ix_impact` risk classification.
 
-**Immediately classify using the risk level and the dependent count that `ix_impact` reports:**
+**Immediately classify using the `risk=` record and the reach count that `ix_impact` reports.** The reach count depends on the target kind: a leaf target (function, method) prints `counts callers= callees=`, so use `callers=`; a container (file, class, module) prints `dependents=`, so use that. Below, "dependents" means whichever of the two applies:
 
 | Risk level | Action |
 |---|---|

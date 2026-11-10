@@ -34,7 +34,7 @@ For every identified target, call simultaneously:
 - `ix_impact` with `{ "target": "<target>" }`
 - `ix_callers` with `{ "symbol": "<target>" }` (limit 15)
 
-Collect the risk level, dependent count, hotspots and recommended next step that `ix_impact` reports, plus key callers by name and subsystem.
+Collect the `risk=` level, the reach count (`callers=` for a leaf target such as a function or method, `dependents=` for a container such as a file, class or module), hotspots and recommended next step that `ix_impact` reports, plus key callers by name and subsystem.
 
 Rank targets: `critical` > `high` > `medium` > `low`.
 

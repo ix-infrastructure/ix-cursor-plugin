@@ -6,7 +6,7 @@
 // server is gone, so text that branches on those fields (or on the old JSON
 // names inside `data`) points the model at things it never sees.
 //
-// `ix_briefing` and `ix_decisions` are listed by the CLI's MCP server only
+// `ix_briefing`, `ix_decisions` and `ix_decide` are listed by the CLI's MCP server only
 // when Ix Pro is installed, so every mention of them must be conditional on
 // the tool being available.
 import assert from "node:assert/strict";
@@ -65,7 +65,7 @@ test("no text names a JSON field path or snake_case result field", () => {
     assert.deepEqual(hits, []);
 });
 test("Pro tools are only ever used conditionally", () => {
-    const pro = /`?ix_(briefing|decisions)`?/;
+    const pro = /`?ix_(briefing|decisions|decide)\b`?/;
     const hits = [];
     for (const path of modelTextFiles()) {
         let heading = "";
@@ -95,5 +95,26 @@ test("no step probes for Pro by calling ix_briefing and reading its result", () 
         .filter((l) => /(?<!not )call(ing)? `ix_briefing`/i.test(l.text) && !/not available|is available|if .*available/i.test(l.text))
         .map(where);
     assert.deepEqual(hits, []);
+});
+test("no text promises prose that ix_explain's llm output drops", () => {
+    // The llm renderer omits the explanation and why-it-matters text; it prints
+    // role, importance and edges records plus caller rows.
+    const hits = lines()
+        .filter((l) => /why-it-matters|`ix_explain` explanation/i.test(l.text))
+        .map(where);
+    assert.deepEqual(hits, []);
+});
+test("impact guidance names the records ix_impact prints", () => {
+    // A leaf target prints `counts callers= callees=`; only a container prints
+    // `dependents=`. "the dependent count" alone has no answer for a leaf.
+    const hits = lines()
+        .filter((l) => /dependent count/i.test(l.text) && /ix_impact/.test(l.text))
+        .map(where);
+    assert.deepEqual(hits, []);
+    for (const file of ["skills/ix-impact/SKILL.md", "agents/ix-safe-refactor-planner.md"]) {
+        const text = readFileSync(join(PLUGIN_ROOT, file), "utf8");
+        for (const rec of ["`risk=`", "`callers=`", "`dependents=`"])
+            assert.ok(text.includes(rec), `${file} should name ${rec}`);
+    }
 });
 //# sourceMappingURL=skill-text.test.js.map

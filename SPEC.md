@@ -224,16 +224,18 @@ The plugin ships no MCP server of its own. `mcp.json` starts `ix mcp --tools=all
 - `ix_smells`
 - `ix_rank`
 - `ix_decisions`
+- `ix_decide`
 - `ix_map`
+- `ix_ingest`
 - `ix_read`
 - `ix_history`
 - `ix_diff`
 
-`ix_briefing` and `ix_decisions` are Pro tools: `ix mcp` lists them only when Ix Pro is installed.
+`ix_briefing`, `ix_decisions` and `ix_decide` are Pro tools: `ix mcp` lists them only when Ix Pro is installed.
 
 ### Tool contract
 
-The CLI runs each tool's `ix` command with `--format llm` and hands the model that line-oriented text unchanged. There is no plugin-side envelope.
+Most tools run their `ix` command with `--format llm` and hand the model that line-oriented text unchanged. The exceptions return JSON: `ix_map` and `ix_ingest` (run as JSON commands), and the three Pro tools `ix_briefing`, `ix_decisions` and `ix_decide`. There is no plugin-side envelope.
 
 Until #24 the plugin shipped its own server (`mcp/server.ts`, `mcp/tools/`) that wrapped every result as `{ok, tool, input, summary, data, evidence, timing_ms}`. That contract is gone, and the skills, agents and rules must not refer to it:
 

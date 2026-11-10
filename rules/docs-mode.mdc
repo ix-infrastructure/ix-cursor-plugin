@@ -15,7 +15,7 @@ When the task is documentation — writing, updating, or generating docs for a c
    - `ix_stats` — confirm scope (file count, symbol counts)
    - `ix_overview <target>` — get the structural summary of the specific target
 
-2. **Explain before reading.** Call `ix_explain` for any symbol that needs a narrative description. The explanation and why-it-matters text in its result is documentation-ready.
+2. **Explain before reading.** Call `ix_explain` for any symbol that needs a narrative description. Its llm output carries structured records, not prose: the symbol's role, its importance, its edges, and the caller rows. Write the narrative yourself from those records.
 
 3. **Use `ix_decisions` for rationale when it is available.** `ix mcp` lists it only when Ix Pro is installed. Architecture decisions contain the "why" that source code does not. When the tool is available, always query it when writing design rationale or architecture docs.
 
@@ -28,13 +28,13 @@ When the task is documentation — writing, updating, or generating docs for a c
 - Do not call `ix_callers` or `ix_callees` for every symbol — docs rarely need full call graphs
 - Do not call `ix_impact` in a docs task unless documenting a high-risk API surface
 - Do not open raw files with Grep or Glob when `ix_explain` would answer the question
-- Do not read source to paraphrase it — paraphrase from `ix_explain` output instead
+- Do not read source to paraphrase it — describe it from the `ix_explain` records instead
 
 ### Output Structure for Docs
 
 For narrative documentation:
-1. Purpose (from the `ix_explain` explanation)
+1. Purpose (from the role record in `ix_explain`)
 2. Where it fits (from `ix_subsystems` and `ix_overview`)
-3. Key relationships (from the users `ix_explain` lists)
-4. Why it matters (from the `ix_explain` result, and `ix_decisions` when it is available)
+3. Key relationships (from the edges record and caller rows in `ix_explain`)
+4. Why it matters (from the importance record in `ix_explain`, and `ix_decisions` when it is available)
 5. Code example (from `ix_read`, only if needed)
