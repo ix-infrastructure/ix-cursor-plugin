@@ -9,19 +9,16 @@ alwaysApply: true
 
 1. **Call `ix_impact` before any meaningful edit.** A "meaningful edit" is any change to a non-trivial symbol — functions, classes, interfaces, exported constants. Skip for documentation-only changes, comment fixes, or new files with no existing dependents.
 
-2. **Interpret `risk_level` before proceeding:**
+2. **Interpret the risk level `ix_impact` reports before proceeding:**
 
-   | `risk_level` | Action |
+   | Risk level | Action |
    |---|---|
    | `low` | Proceed. Note the change briefly. |
    | `medium` | Proceed, but mention affected dependents in your response. |
    | `high` | Produce a change plan outline before editing. List the symbols most at risk. |
    | `critical` | Stop. Do not edit. Generate a full change plan and ask the user to confirm before proceeding. |
 
-3. **Use `recommended_action` from the `ix_impact` result** to determine next steps. The values map directly to the table above:
-   - `safe_to_proceed` → low
-   - `review_callers_first` → medium
-   - `needs_change_plan` → high or critical
+3. **Use the recommended next step in the `ix_impact` result**, when it gives one, to determine next steps. It agrees with the table above: proceed for low, review callers first for medium, a change plan for high or critical.
 
 ### Narrowing Edits
 
@@ -34,8 +31,8 @@ alwaysApply: true
 ### Change Plan Format (for high / critical)
 
 When risk requires a plan, include:
-- The symbol being changed and its `risk_level`
-- The top 3–5 impacted dependents (from `ix_impact` hotspots)
+- The symbol being changed and its risk level
+- The top 3–5 impacted dependents (the hotspots or most impacted members `ix_impact` lists)
 - The intended change, scoped as narrowly as possible
 - Any callers that will need updates
 - A suggested test checkpoint (what to verify after the edit)

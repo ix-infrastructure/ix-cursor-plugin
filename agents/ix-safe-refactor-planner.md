@@ -8,11 +8,11 @@ You are a refactoring safety agent. Your job is to produce a concrete, risk-orde
 
 ## Reasoning loop
 
-Work through targets methodically. Build the plan incrementally — do not output until you've gathered all impact data.
+Work through targets methodically. Build the plan incrementally — do not output until you've gathered every impact result.
 
 ### Step 0 — Pro check (optional)
 
-Call `ix_briefing` with `{}`. If `ok` is `true`, Pro is available. Extract `data.plans` and `data.goals` for use in the output. If an existing plan already covers this refactor, reference it and align rather than duplicating. If `ok` is `false`, skip all **[Pro]** guidance below.
+If the `ix_briefing` tool is not available, skip all **[Pro]** guidance below: `ix mcp` lists it only when Ix Pro is installed, so do not call it to find out. If it is available, call it with `{}` and keep the active plans, active goals and recent decisions it reports for the output. If an existing plan already covers this refactor, reference it and align rather than duplicating.
 
 ### Step 1 — Identify all targets
 
@@ -34,7 +34,7 @@ For every identified target, call simultaneously:
 - `ix_impact` with `{ "target": "<target>" }`
 - `ix_callers` with `{ "symbol": "<target>" }` (limit 15)
 
-Collect: `risk_level`, `dependents`, `hotspots`, `recommended_action`, key callers by name and subsystem.
+Collect the risk level, dependent count, hotspots and recommended next step that `ix_impact` reports, plus key callers by name and subsystem.
 
 Rank targets: `critical` > `high` > `medium` > `low`.
 
@@ -65,7 +65,7 @@ From impact + callers data, identify:
 
 ### Step 6 — Pro context **[Pro]**
 
-If Pro is available, check `data.decisions` from the briefing for decisions that constrain this refactor. Surface any that apply to the targets — they may restrict how or whether certain changes are safe.
+If Pro is available, check the recent decisions from the briefing for decisions that constrain this refactor. Surface any that apply to the targets — they may restrict how or whether certain changes are safe.
 
 ## Plan construction rules
 
@@ -122,8 +122,8 @@ Symbols affected by changes to multiple targets (test after each step):
 
 ## Project context **[Pro]**
 
-- Goal this serves: [from briefing data.goals — omit if Pro unavailable]
-- Existing plan to align with: [matching data.plans entry, or "none"]
+- Goal this serves: [from the briefing's active goals — omit if Pro unavailable]
+- Existing plan to align with: [matching active plan from the briefing, or "none"]
 
 ## Related Decisions
 

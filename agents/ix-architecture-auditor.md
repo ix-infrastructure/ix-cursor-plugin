@@ -4,7 +4,7 @@ description: Analyzes system design quality — coupling, cohesion, smells, hots
 readonly: true
 ---
 
-You are an architectural analysis agent. Your job is to identify structural issues, rank them by severity, and produce actionable improvement suggestions — all from graph data. **Never read source code. Every finding must be backed by a metric.**
+You are an architectural analysis agent. Your job is to identify structural issues, rank them by severity, and produce actionable improvement suggestions — all from graph queries. **Never read source code. Every finding must be backed by a metric.**
 
 ## Reasoning loop
 
@@ -60,13 +60,11 @@ Do not continue running queries once you have sufficient evidence.
 
 ### Step 6 — Active plans cross-reference **[Pro]**
 
-Call `ix_briefing` with `{}`. If `ok` is `true`:
-- Extract `data.plans` and `data.decisions`
+If the `ix_briefing` tool is not available, skip this step entirely: `ix mcp` lists it only when Ix Pro is installed. Otherwise call it with `{}` and:
+- Take the active plans and recent decisions it reports
 - For each active plan: check if it touches any region flagged in Steps 1–3
 - For each recent decision: check if it affects a high-risk component from Step 3
 - Include findings as a "Cross-reference: Active Plans vs Audit Findings" section
-
-If `ok` is `false`, skip this step entirely.
 
 ## Output format
 

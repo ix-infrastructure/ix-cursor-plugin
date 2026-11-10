@@ -15,9 +15,9 @@ When the task is documentation — writing, updating, or generating docs for a c
    - `ix_stats` — confirm scope (file count, symbol counts)
    - `ix_overview <target>` — get the structural summary of the specific target
 
-2. **Explain before reading.** Call `ix_explain` for any symbol that needs a narrative description. The `rendered.explanation` and `rendered.whyItMatters` fields are documentation-ready text.
+2. **Explain before reading.** Call `ix_explain` for any symbol that needs a narrative description. The explanation and why-it-matters text in its result is documentation-ready.
 
-3. **Use `ix_decisions` for rationale.** Architecture decisions contain the "why" that source code does not. Always query `ix_decisions` when writing design rationale or architecture docs.
+3. **Use `ix_decisions` for rationale when it is available.** `ix mcp` lists it only when Ix Pro is installed. Architecture decisions contain the "why" that source code does not. When the tool is available, always query it when writing design rationale or architecture docs.
 
 4. **Use `ix_trace` only when runtime behavior is required.** Call `ix_trace` only if the documentation explicitly covers call flow, startup sequence, or request lifecycle. Do not trace speculatively.
 
@@ -33,8 +33,8 @@ When the task is documentation — writing, updating, or generating docs for a c
 ### Output Structure for Docs
 
 For narrative documentation:
-1. Purpose (from `ix_explain.rendered.explanation`)
+1. Purpose (from the `ix_explain` explanation)
 2. Where it fits (from `ix_subsystems` and `ix_overview`)
-3. Key relationships (from `ix_explain.rendered.usedBy`)
-4. Why it matters (from `ix_explain.rendered.whyItMatters` and `ix_decisions`)
+3. Key relationships (from the users `ix_explain` lists)
+4. Why it matters (from the `ix_explain` result, and `ix_decisions` when it is available)
 5. Code example (from `ix_read`, only if needed)

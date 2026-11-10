@@ -190,7 +190,7 @@ Include one additional **ix-system-explorer** agent in the same single message f
 # System: [name or "Whole Repo"]
 
 ## Overview
-[What the system is and does — purpose, language, scale. Sourced from orient data.]
+[What the system is and does — purpose, language, scale. Sourced from the orient results.]
 
 ## Architecture
 

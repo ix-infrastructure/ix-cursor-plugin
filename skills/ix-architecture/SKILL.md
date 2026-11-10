@@ -13,13 +13,13 @@ Strip `--save` and any following path token from `$ARGUMENTS` before processing 
 
 ## Health gate
 
-Call `ix_health` with `{}`. If `ok` is `false`, stop: *"ix graph unavailable — ensure the ix server is running."*
+Call `ix_health` with `{}`. If the call fails or its result is an error, stop: *"ix graph unavailable — ensure the ix server is running."*
 
 Then call `ix_subsystems` with `{}`. If the result contains no subsystems, stop: *"No graph data yet — call `ix_map` to build the graph first."*
 
 ## Pro check
 
-Call `ix_briefing` with `{}`. If `ok` is `true`, Pro is available. Extract `data.decisions` for use below. Skip all **[Pro]** steps if it returns `ok: false`.
+If the `ix_briefing` tool is not available in this session, skip every **[Pro]** step below: `ix mcp` lists it only when Ix Pro is installed, so do not call it to find out. If it is available, call it with `{}` and keep the recent decisions it reports for the **[Pro]** steps.
 
 ---
 
@@ -92,7 +92,7 @@ When taking the inline path, produce:
 
 ## [Pro] Cross-reference decisions
 
-If Pro is available, after the report (inline or delegated) is complete, check `data.decisions` from the briefing.
+If Pro is available, after the report (inline or delegated) is complete, check the recent decisions from the briefing.
 
 Append a **Recorded Decisions** section cross-referencing relevant design decisions against the findings — especially decisions that affect god-modules, high-coupling regions, or identified hotspots.
 

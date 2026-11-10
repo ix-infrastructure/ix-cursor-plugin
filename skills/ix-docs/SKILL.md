@@ -133,9 +133,9 @@ Do not call every tool mechanically. Reuse earlier results and stop when additio
 Always start by calling in parallel:
 - `ix_stats` with `{}`
 - `ix_subsystems` with `{}`
-- `ix_briefing` with `{}`
+- `ix_briefing` with `{}`, only if that tool is available (`ix mcp` lists it only when Ix Pro is installed)
 
-**Pro check:** If `ix_briefing` returns `ok: true`, Pro is available. Extract `data.goals`, `data.decisions` for use in **[Pro]** steps. If it returns `ok: false`, skip all Pro-labeled steps.
+**Pro check:** If the `ix_briefing` tool is not available, skip all **[Pro]** steps. Otherwise keep the active goals and recent decisions it reports for those steps.
 
 If `TARGET` is not obviously the whole repo, call `ix_locate` with `{ "symbol": "<TARGET>" }`.
 
@@ -216,7 +216,7 @@ Full mode: also run `ix_impact` for the top 2–5 high-centrality entities.
 
 Call `ix_smells` with `{}`. Filter by path prefix after retrieval if the target is a subsystem or module.
 
-**[Pro]** If Pro is available and `data.decisions` is non-empty, incorporate relevant architectural decisions in the risk and complexity section.
+**[Pro]** If Pro is available and the briefing listed any recent decisions, incorporate relevant architectural decisions in the risk and complexity section.
 
 Prioritize: god modules, highly coupled regions, orphaned components, subsystems with weak boundaries. Group health issues by subsystem, not as a flat dump.
 
@@ -268,7 +268,7 @@ Call `ix_read` with `{ "symbol": "<symbol>" }`. Extract only the behavior needed
 
 ### 1. Overview
 - what the system is, what it does, why it exists
-- **[Pro]** active project goals this system serves (from briefing data.goals), if available
+- **[Pro]** active project goals this system serves (from the briefing's active goals), if available
 
 ### 2. Architecture
 - systems → subsystems → modules

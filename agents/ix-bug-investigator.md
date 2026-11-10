@@ -49,7 +49,7 @@ Call `ix_trace` with `{ "symbol": "<entry-point>" }`.
 Walk the downstream call chain. At each node, ask:
 - Does this node perform state validation or transformation? (failure candidate)
 - Is this a cross-subsystem call? (contract violation candidate)
-- Does this node have many callees (`facts.calleeCount` high)? (god function — many failure points)
+- Does this node have many callees (`ix_explain` reports a high callee count)? (god function — many failure points)
 
 Form **hypothesis**: which 1–3 nodes are most suspicious?
 

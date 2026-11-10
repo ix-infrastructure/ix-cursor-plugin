@@ -11,7 +11,7 @@ Hooks fire automatically at tool boundaries and inject Ix context into the conve
 
 1. **If briefing context is already present in this turn, do not call `ix_briefing` again.** Injected briefing context appears as a block starting with `[ix] Session briefing:`, added when the conversation starts. Treat it as authoritative for the current turn.
 
-2. **Briefing TTL is 10 minutes.** If the conversation began more than 10 minutes ago and significant new context has been requested, a fresh `ix_briefing` call is appropriate. Otherwise, reuse the injected data.
+2. **Briefing TTL is 10 minutes.** If the conversation began more than 10 minutes ago and significant new context has been requested, a fresh `ix_briefing` call is appropriate if the tool is available. Otherwise, reuse the injected briefing.
 
 3. **Do not call `ix_briefing` mid-task to "refresh" orientation** unless the user explicitly asks for an updated briefing or the task has shifted to a completely different subsystem.
 

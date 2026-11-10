@@ -13,7 +13,7 @@ Strip `--save` and any following path token from `$ARGUMENTS` before resolving t
 
 ## Pro check (optional)
 
-Call `ix_briefing` with `{}`. If `ok` is `true`, Pro is available. Extract `data.decisions` and `data.plans` for use in Pro steps below. If it returns `ok: false`, skip all **[Pro]** labeled steps.
+If the `ix_briefing` tool is not available in this session, skip every **[Pro]** step below: `ix mcp` lists it only when Ix Pro is installed, so do not call it to find out. If it is available, call it with `{}` and keep the recent decisions and active plans it reports for the **[Pro]** steps.
 
 ## Goal
 
@@ -23,7 +23,7 @@ Answer: *what is this, how does it connect, and what's the execution path?* Stop
 
 Call `ix_locate` with `{ "symbol": "<target from $ARGUMENTS>" }`.
 
-If multiple matches: use the `resolution_mode` and `diagnostics` fields to refine. Do not proceed until the entity is unambiguous.
+If multiple matches: use the candidates and any resolution notes `ix_locate` reports to refine. Do not proceed until the entity is unambiguous.
 
 If `ix_locate` returns no match: call `ix_text` with `{ "pattern": "<target>", "limit": 10 }`.
 
@@ -31,11 +31,11 @@ If `ix_locate` returns no match: call `ix_text` with `{ "pattern": "<target>", "
 
 Call `ix_explain` with `{ "symbol": "<resolved-symbol>" }`.
 
-Extract: `role.role`, `importance.level`, `facts.callerCount`, `facts.calleeCount`.
+Extract the role, importance, caller count and callee count the result reports.
 
 If the resolved entity is a **class or module**, also call `ix_overview` with `{ "target": "<resolved-symbol>" }`. This reveals internal structure (members, sub-components) without reading source.
 
-**Orphan check:** If `facts.callerCount === 0` AND `facts.calleeCount === 0` in the `ix_explain` result:
+**Orphan check:** If the `ix_explain` result reports zero callers AND zero callees:
 - Report: "Symbol is a graph orphan — no detected dependencies. Either the graph needs a refresh (`ix_map`) or the file has no parseable import/call relationships."
 - Suggest calling `ix_map` with `{}` (re-maps the workspace; `ix map` takes a directory, never a single file) as first step.
 - Stop here — skip Phases 3–5 unless the user specifically asks for source-level inspection.
@@ -73,7 +73,7 @@ Read **the symbol only** — never the full file. If the symbol is a class, read
 
 ## Phase 6 — Design context **[Pro]**
 
-If Pro is available and `data.decisions` from the briefing is non-empty, call `ix_decisions` with `{ "path": "<resolved-symbol>" }` to check for decisions affecting this symbol.
+If Pro is available and the briefing listed any recent decisions, call `ix_decisions` with `{ "path": "<resolved-symbol>" }` to check for decisions affecting this symbol.
 
 Include any relevant decisions in the output under **Design context**.
 

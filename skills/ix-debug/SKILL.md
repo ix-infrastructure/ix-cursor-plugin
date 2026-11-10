@@ -13,9 +13,9 @@ Strip `--save` and any following path token from `$ARGUMENTS` before resolving t
 
 ## Pro check (optional)
 
-Call `ix_briefing` with `{}`. If `ok` is `true`, Pro is available. Extract `data.decisions` for use in Pro steps below. If it returns `ok: false`, skip all **[Pro]** labeled steps.
+If the `ix_briefing` tool is not available in this session, skip every **[Pro]** step below: `ix mcp` lists it only when Ix Pro is installed, so do not call it to find out. If it is available, call it with `{}` and keep the recent decisions it reports for the **[Pro]** steps.
 
-**[Pro]** If `data.decisions` is non-empty, scan for a recorded decision matching this symptom area before proceeding. Surface any relevant match — it may already explain the behavior or constrain the fix.
+**[Pro]** If the briefing listed any recent decisions, scan for a recorded decision matching this symptom area before proceeding. Surface any relevant match — it may already explain the behavior or constrain the fix.
 
 ## Goal
 
@@ -33,7 +33,7 @@ Identify the most likely entry point (where the failure originates or first mani
 
 Call `ix_explain` with `{ "symbol": "<entry-point>" }`.
 
-Extract: `role.role`, `importance.level`, `facts.callerCount`, `facts.calleeCount`. Identify whether this is:
+Extract the role, importance, caller count and callee count the result reports. Identify whether this is:
 - A **boundary** (external input, API, event) — failure likely from unexpected input
 - An **orchestrator** — failure likely from wrong sequencing or state
 - A **utility/helper** — failure likely from wrong assumptions by caller
@@ -44,8 +44,8 @@ Extract: `role.role`, `importance.level`, `facts.callerCount`, `facts.calleeCoun
 
 Use the Phase 1–2 results to choose the path:
 
-- **Inline path (simple bug):** the likely failure is still within a single subsystem, the role confidence is high, and `facts.calleeCount` ≤ 10 → continue to Phase 4.
-- **Delegate path (complex bug):** role confidence is low, OR `facts.calleeCount` > 10 → use the Task tool with `subagent_type: "ix-bug-investigator"` and pass the pre-computed context below.
+- **Inline path (simple bug):** the likely failure is still within a single subsystem, the role confidence is high, and the callee count is 10 or fewer → continue to Phase 4.
+- **Delegate path (complex bug):** role confidence is low, OR the callee count is above 10 → use the Task tool with `subagent_type: "ix-bug-investigator"` and pass the pre-computed context below.
 
 **You MUST pass pre-computed context so the agent skips redundant work.** Launch the agent with:
 
