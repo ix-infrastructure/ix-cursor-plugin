@@ -2,16 +2,18 @@
 // How the hooks start `ix`. The pure tests simulate win32 on any host; the
 // host tests put a fake `ix` on PATH and drive the real hook code paths
 // (checkHealth, runIx, isMapped, requestAutoMap). On Windows the fake is an
-// `ix.cmd` launcher that forwards %* to node, the way an installed ix.cmd
-// does, so these run in CI's windows-latest job.
+// `ix.cmd` launcher that forwards %* to node, and a second fake mirrors the
+// installer's two-level bin\ix.cmd -> cli\ix.cmd -> node layout, so these
+// run in CI's windows-latest job.
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { chmod, copyFile, link, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
-import { findExecutable, ixLaunch, quoteCmdArg } from "../../lib/launch.js";
+import { batchLaunch, findExecutable, installerLaunch, ixLaunch, quoteCmdArg } from "../../lib/launch.js";
 const WIN = process.platform === "win32";
 // Arguments cmd.exe would split, expand or eat if they were concatenated raw.
 const NASTY = [
@@ -25,6 +27,25 @@ const NASTY = [
     'back\\"slash',
     "two words",
     "",
+];
+// Every cmd.exe special character on its own and mixed, % sequences cmd would
+// expand, and backslash edge cases.
+const CANARY_DIR = await realpath(await mkdtemp(join(tmpdir(), "ix-canary-")));
+const MARKER = join(CANARY_DIR, "marker");
+// Would leave MARKER behind if cmd.exe ran any part of them as a command.
+const CANARIES = [
+    `" & type nul > "${MARKER}" & "`,
+    `^" & type nul > "${MARKER}" ^& "`,
+    `& type nul > "${MARKER}"`,
+    `%cd:~,%" | type nul > "${MARKER}" | "`,
+];
+const DEEP = [
+    "&", "|", "<", ">", "^", '"', "%", "!", "(", ")",
+    "a & b | c < d > e ^ f ( g ) ! h",
+    'say "hi"', '""', "two words", " lead and trail ",
+    "trailing\\", "\\", "dir\\\\", 'back\\"slash', "",
+    "%PATH%", "%PATH:a=b%", "!PATH!", "%%", "%cd:~,%", "%~dp0", "100%",
+    ...CANARIES,
 ];
 // Built before importing lib/cli.js, which reads IX_BIN at import time.
 const ROOT = await realpath(await mkdtemp(join(tmpdir(), "ix launch & co ")));
@@ -57,6 +78,7 @@ const { checkHealth, runIx } = await import("../../lib/cli.js");
 const { isMapped, requestAutoMap } = await import("../../shared/auto-map.js");
 test.after(async () => {
     process.env["PATH"] = ORIGINAL_PATH;
+    await rm(CANARY_DIR, { recursive: true, force: true });
     // A detached `ix map` may still hold the dir for a moment on Windows.
     await rm(ROOT, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 });
@@ -105,7 +127,40 @@ test("POSIX launch is unchanged: the bare name, no shell, no verbatim args", asy
         windowsVerbatimArguments: false,
     });
 });
-test("win32 runs a .cmd through cmd.exe /d /s /c with every argument escaped", async () => {
+test("win32 lookup skips relative PATH entries, never the working directory", async () => {
+    const cwd = process.cwd();
+    const rel = join(ROOT, "rel");
+    await mkdir(rel, { recursive: true });
+    await writeFile(join(rel, "ix.cmd"), "");
+    await writeFile(join(rel, "ix"), "#!/bin/sh\n");
+    await chmod(join(rel, "ix"), 0o755);
+    try {
+        process.chdir(ROOT);
+        assert.equal(await findExecutable("ix", { platform: "win32", env: { PATH: "rel;.;", PATHEXT: ".CMD" } }), null);
+        process.chdir(rel);
+        assert.equal(await findExecutable("ix", { platform: "win32", env: { PATH: ".", PATHEXT: ".CMD" } }), null);
+        if (!WIN) {
+            assert.equal(await findExecutable("ix", { platform: "linux", env: { PATH: ".:rel:" } }), null);
+        }
+        // The same directory given absolute is found.
+        assert.equal(await findExecutable("ix", { platform: "win32", env: { PATH: rel, PATHEXT: ".CMD" } }), join(rel, "ix.cmd"));
+    }
+    finally {
+        process.chdir(cwd);
+    }
+});
+test("a found path is cached for the process; a changed PATH is looked up again", async () => {
+    const dir = join(ROOT, "cached");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "ix.cmd"), "");
+    const env = { PATH: dir, PATHEXT: ".CMD" };
+    assert.equal(await findExecutable("ix", { platform: "win32", env }), join(dir, "ix.cmd"));
+    await rm(join(dir, "ix.cmd"));
+    // No second walk of PATH x PATHEXT: the first answer stands.
+    assert.equal(await findExecutable("ix", { platform: "win32", env }), join(dir, "ix.cmd"));
+    assert.equal(await findExecutable("ix", { platform: "win32", env: { PATH: `${dir};${EMPTY_DIR}`, PATHEXT: ".CMD" } }), null);
+});
+test("win32 runs an unknown .cmd through cmd.exe /e:on /d /v:off /s /c with every argument quoted", async () => {
     const dir = join(ROOT, "launch");
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, "ix.cmd"), "");
@@ -114,11 +169,100 @@ test("win32 runs a .cmd through cmd.exe /d /s /c with every argument escaped", a
     assert.equal(launch.file, "C:\\Windows\\system32\\cmd.exe");
     assert.equal(launch.windowsVerbatimArguments, true);
     assert.deepEqual(launch.args, [
+        "/e:on",
         "/d",
+        "/v:off",
         "/s",
         "/c",
-        `""${join(dir, "ix.cmd")}" ${quoteCmdArg("text")} ${quoteCmdArg("a&b")}"`,
+        `""${join(dir, "ix.cmd")}" "text" "a&b""`,
     ]);
+});
+test("a % in the launcher path is written so the /c line does not expand it", () => {
+    const launch = batchLaunch("C:\\100%\\ix.cmd", ["x"], { platform: "win32", env: {} });
+    assert.equal(launch.file, "cmd.exe");
+    assert.equal(launch.args.at(-1), '""C:\\100%%cd:~,%\\ix.cmd" "x""');
+    assert.throws(() => batchLaunch('C:\\a"b\\ix.cmd', [], { platform: "win32", env: {} }), /launcher path/);
+});
+/** A fake installer home: bin\ix.cmd -> cli\ix.cmd -> node "<script>" %*. */
+async function fakeInstall(name, innerLine, opts = {}) {
+    const home = join(ROOT, name);
+    await mkdir(join(home, "bin"), { recursive: true });
+    await mkdir(join(home, "cli", "dist", "cli"), { recursive: true });
+    const script = join(home, "cli", "main.js");
+    await writeFile(script, INSTALL_MAIN);
+    if (opts.knownMain)
+        await writeFile(join(home, "cli", "dist", "cli", "main.js"), INSTALL_MAIN);
+    await writeFile(join(home, "bin", "ix.cmd"), '@"%~dp0..\\cli\\ix.cmd" %*\r\n');
+    if (innerLine !== null) {
+        await writeFile(join(home, "cli", "ix.cmd"), `@echo off\r\n${innerLine.replace("<main>", script)}\r\n`);
+    }
+    return { home, launcher: join(home, "bin", "ix.cmd"), script, argvFile: join(home, "cli", "argv.json") };
+}
+// The fake CLI entry: records its argv next to itself and answers like `ix`.
+const INSTALL_MAIN = [
+    'const fs = require("fs"), path = require("path");',
+    "const argv = process.argv.slice(2);",
+    'fs.writeFileSync(path.join(__dirname, "argv.json"), JSON.stringify(argv));',
+    "process.stdout.write(JSON.stringify({ argv, graphCompleted: true }) + '\\n');",
+].join("\n");
+// A node.exe for simulated win32 lookups; a link to this node, so it runs anywhere.
+const NODE_DIR = join(ROOT, "node dir");
+await mkdir(NODE_DIR);
+// Windows may refuse a symlink without privileges; then a hard link, then a copy.
+await symlink(process.execPath, join(NODE_DIR, "node.exe"))
+    .catch(() => link(process.execPath, join(NODE_DIR, "node.exe")))
+    .catch(() => copyFile(process.execPath, join(NODE_DIR, "node.exe")));
+test("win32 starts the installer layout as node + script with no shell (simulated)", async () => {
+    const env = { PATH: NODE_DIR, PATHEXT: ".EXE;.CMD" };
+    const plain = await fakeInstall("install-plain", '@node "<main>" %*');
+    assert.deepEqual(await installerLaunch(plain.launcher, { platform: "win32", env }), {
+        node: join(NODE_DIR, "node.exe"),
+        script: plain.script,
+    });
+    assert.deepEqual(await ixLaunch(plain.launcher, ["text", ...DEEP], { platform: "win32", env }), { file: join(NODE_DIR, "node.exe"), args: [plain.script, "text", ...DEEP], windowsVerbatimArguments: false });
+    // No cmd.exe means a line break is just data here.
+    const nl = await ixLaunch(plain.launcher, ["a\r\nb"], { platform: "win32", env });
+    assert.deepEqual(nl.args, [plain.script, "a\r\nb"]);
+    // %~dp0-relative script, quoted node.
+    const rel = await fakeInstall("install-dp0", '"node.exe" "%~dp0main.js" %*');
+    assert.deepEqual(await installerLaunch(rel.launcher, { platform: "win32", env }), {
+        node: join(NODE_DIR, "node.exe"),
+        script: rel.script,
+    });
+    // No node on PATH: the Node running this plugin.
+    const noNode = await fakeInstall("install-nonode", '@node "<main>" %*');
+    assert.deepEqual(await installerLaunch(noNode.launcher, { platform: "win32", env: { PATH: EMPTY_DIR } }), {
+        node: process.execPath,
+        script: noNode.script,
+    });
+});
+test("win32 falls back to the known CLI path, then to cmd.exe, when the layout is not recognised", async () => {
+    const env = { PATH: NODE_DIR, PATHEXT: ".EXE;.CMD" };
+    const known = await fakeInstall("install-known", "@call something-else %*", { knownMain: true });
+    assert.deepEqual(await installerLaunch(known.launcher, { platform: "win32", env }), {
+        node: join(NODE_DIR, "node.exe"),
+        script: join(known.home, "cli", "dist", "cli", "main.js"),
+    });
+    for (const [name, line] of [
+        ["install-other", "@call something-else %*"],
+        ["install-var", '@node "%IX_HOME%\\main.js" %*'],
+        ["install-nonnode", '@python "<main>" %*'],
+        ["install-missing", null],
+    ]) {
+        const fake = await fakeInstall(name, line);
+        assert.equal(await installerLaunch(fake.launcher, { platform: "win32", env }), null, name);
+        const launch = await ixLaunch(fake.launcher, ["x"], { platform: "win32", env });
+        assert.equal(launch.windowsVerbatimArguments, true, name);
+        assert.deepEqual(launch.args.slice(0, 5), ["/e:on", "/d", "/v:off", "/s", "/c"], name);
+    }
+});
+test("the installer layout, started as ixLaunch says, receives every argument exactly", async () => {
+    const fake = await fakeInstall("install-run", '@node "<main>" %*');
+    const env = { PATH: NODE_DIR, PATHEXT: ".EXE;.CMD" };
+    const launch = await ixLaunch(fake.launcher, DEEP, { platform: "win32", env });
+    execFileSync(launch.file, launch.args, { windowsHide: true });
+    assert.deepEqual(JSON.parse(await readFile(fake.argvFile, "utf8")), DEEP);
+    assert.equal(existsSync(MARKER), false);
 });
 test("win32 starts an .exe directly, and falls back to the bare name when nothing is found", async () => {
     const dir = join(ROOT, "exe");
@@ -129,13 +273,18 @@ test("win32 starts an .exe directly, and falls back to the bare name when nothin
     const missing = await ixLaunch("ix", ["status"], { platform: "win32", env: { PATH: EMPTY_DIR } });
     assert.deepEqual(missing, { file: "ix", args: ["status"], windowsVerbatimArguments: false });
 });
-test("quoteCmdArg quotes for the program, then caret-escapes twice for cmd and the .cmd's %* line", () => {
-    assert.equal(quoteCmdArg("ix"), '^^^"ix^^^"');
-    assert.equal(quoteCmdArg("a&b"), '^^^"a^^^&b^^^"');
-    assert.equal(quoteCmdArg('say "hi"'), '^^^"say^^^ \\^^^"hi\\^^^"^^^"');
-    assert.equal(quoteCmdArg("trailing\\"), '^^^"trailing\\\\^^^"');
-    assert.equal(quoteCmdArg('a\\"b'), '^^^"a\\\\\\^^^"b^^^"');
-    assert.equal(quoteCmdArg(""), '^^^"^^^"');
+test("quoteCmdArg: always quoted, \"\" for a quote, %%cd:~,% for %, no carets", () => {
+    assert.equal(quoteCmdArg("ix"), '"ix"');
+    assert.equal(quoteCmdArg("a&b|c<d>e^f(g)!h"), '"a&b|c<d>e^f(g)!h"');
+    assert.equal(quoteCmdArg('say "hi"'), '"say ""hi"""');
+    assert.equal(quoteCmdArg("trailing\\"), '"trailing\\\\"');
+    assert.equal(quoteCmdArg('a\\"b'), '"a\\\\""b"');
+    assert.equal(quoteCmdArg("a\\b"), '"a\\b"');
+    assert.equal(quoteCmdArg(""), '""');
+    assert.equal(quoteCmdArg("%PATH:a=b%"), '"%%cd:~,%PATH:a=b%%cd:~,%"');
+    const carets = (x) => x.split("^").length - 1;
+    for (const arg of DEEP)
+        assert.equal(carets(quoteCmdArg(arg)), carets(arg), arg);
 });
 test("an argument with a line break is refused rather than cut at the newline", async () => {
     assert.throws(() => quoteCmdArg("a\nb"), /line break/);
@@ -153,10 +302,11 @@ test("checkHealth is false without ix on PATH and true with it (ix.cmd on Window
 });
 test("every argument, metacharacters and quotes included, reaches ix as one argument", async () => {
     withFakeOnPath();
-    const result = await runIx(["text", ...NASTY]);
+    const result = await runIx(["text", ...NASTY, ...DEEP]);
     assert.equal(result.ok, true, result.stderr);
     const { argv } = JSON.parse(result.stdout);
-    assert.deepEqual(argv, ["text", ...NASTY, "--format", "json"]);
+    assert.deepEqual(argv, ["text", ...NASTY, ...DEEP, "--format", "json"]);
+    assert.equal(existsSync(MARKER), false);
 });
 test("auto-map: ix status and the detached ix map both start through the launcher", async () => {
     withFakeOnPath();
@@ -179,5 +329,31 @@ test("auto-map: ix status and the detached ix map both start through the launche
         await delay(50);
     }
     assert.deepEqual(maps, [["map", root, "--silent"]]);
+});
+// ── Host, Windows only: through the installer's two-level launcher ───────────
+test("windows: arguments reach node unchanged through cmd.exe and both launcher levels", { skip: !WIN }, async () => {
+    const fake = await fakeInstall("two-level", '@node "<main>" %*');
+    const launch = batchLaunch(fake.launcher, DEEP);
+    const run = spawnSync(launch.file, launch.args, {
+        cwd: CANARY_DIR,
+        encoding: "utf8",
+        windowsHide: true,
+        windowsVerbatimArguments: launch.windowsVerbatimArguments,
+    });
+    assert.equal(run.status, 0, run.stderr);
+    assert.deepEqual(JSON.parse(await readFile(fake.argvFile, "utf8")), DEEP);
+    assert.equal(existsSync(MARKER), false);
+});
+test("windows: runIx starts the installer layout with node directly", { skip: !WIN }, async () => {
+    const fake = await fakeInstall("two-level-path", '@node "<main>" %*');
+    process.env["PATH"] = `${join(fake.home, "bin")}${delimiter}${ORIGINAL_PATH}`;
+    const launch = await ixLaunch("ix", ["x"]);
+    assert.match(launch.file, /node\.exe$/i);
+    assert.equal(launch.windowsVerbatimArguments, false);
+    assert.deepEqual(launch.args, [fake.script, "x"]);
+    const result = await runIx(["text", ...DEEP]);
+    assert.equal(result.ok, true, result.stderr);
+    assert.deepEqual(JSON.parse(await readFile(fake.argvFile, "utf8")), ["text", ...DEEP, "--format", "json"]);
+    assert.equal(existsSync(MARKER), false);
 });
 //# sourceMappingURL=launch.test.js.map
