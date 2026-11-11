@@ -65,7 +65,12 @@ Windows PowerShell:
 powershell -ExecutionPolicy Bypass -NoProfile -Command "iwr https://raw.githubusercontent.com/ix-infrastructure/ix-cursor-plugin/main/install.ps1 -UseBasicParsing | iex"
 ```
 
-This downloads the repo archive, installs the plugin into `~/.cursor/plugins/local/ix-memory`, and installs/builds MCP dependencies if needed.
+This downloads the repo archive and installs the plugin into `~/.cursor/plugins/local/ix-memory`. The archive ships the built hooks (`mcp/dist`), which run on Node alone; npm is used only to build them if `mcp/dist` is missing. When it finishes, the installer prints the version it installed and the ref it came from.
+
+By default it installs the current tip of the `main` branch. To install something else, set one of these before running the installer (for example `curl -fsSL .../install.sh | IX_CURSOR_VERSION=1.2.3 bash`, or `$env:IX_CURSOR_VERSION = "1.2.3"` in PowerShell):
+
+- `IX_CURSOR_VERSION=1.2.3` installs the release tag `v1.2.3`.
+- `IX_CURSOR_REF=<ref>` installs a branch name, a full ref such as `refs/tags/<tag>`, or a full 40-character commit sha.
 
 To uninstall:
 
