@@ -192,4 +192,3 @@ async function main() {
 main().catch(() => {
     process.exit(0);
 });
-//# sourceMappingURL=pre-search.js.map
