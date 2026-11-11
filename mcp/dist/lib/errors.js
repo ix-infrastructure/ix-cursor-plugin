@@ -47,4 +47,3 @@ export function captureError(err, context) {
         }
     })();
 }
-//# sourceMappingURL=errors.js.map

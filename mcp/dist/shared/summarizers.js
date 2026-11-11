@@ -29,4 +29,3 @@ export function summarizeRisk(result) {
             return "";
     }
 }
-//# sourceMappingURL=summarizers.js.map

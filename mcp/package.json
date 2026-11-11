@@ -4,7 +4,7 @@
   "description": "MCP server for ix-cursor-plugin",
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "test": "tsx --test tests/**/*.test.ts",
     "test:unit": "tsx --test tests/unit/**/*.test.ts",
     "test:real-ix": "tsx --test tests/real-ix/*.real-ix.ts",
