@@ -49,44 +49,23 @@ export async function checkHealth() {
     }
 }
 // ── Allowlist enforcement ─────────────────────────────────────────────────────
-const READ_ONLY_GIT_SUBCOMMANDS = new Set([
-    "branch",
-    "diff",
-    "log",
-    "ls-files",
-    "ls-remote",
-    "merge-base",
-    "reflog",
-    "rev-list",
-    "rev-parse",
-    "show",
-    "status",
-]);
-function assertAllowedCommand(bin, args) {
+// Only ix is ever run. IX_BIN may point anywhere, but its file name must be ix.
+function assertAllowedCommand(bin) {
     const command = basename(bin);
     if (command === "ix") {
         return;
     }
-    if (command === "git") {
-        const subcommand = args[0] ?? "";
-        if (READ_ONLY_GIT_SUBCOMMANDS.has(subcommand)) {
-            return;
-        }
-        throw new IxError("PERMISSION_DENIED", `git subcommand '${subcommand || "(missing)"}' is not permitted by the MCP allowlist.`);
-    }
-    throw new IxError("PERMISSION_DENIED", `Command '${command}' is outside the MCP allowlist.`);
+    throw new IxError("PERMISSION_DENIED", `Command '${command}' is not ix; the plugin runs only ix.`);
 }
 // ── Core CLI invocation ───────────────────────────────────────────────────────
-async function runIxFormat(args, format, opts = {}) {
+// Machine-readable JSON. Every caller (the hooks) parses the output, so any
+// prose ix prints before the JSON is stripped.
+export async function runIx(args, opts = {}) {
     const start = Date.now();
     const timeout = opts.timeout ?? timeoutFor(args[0] ?? "");
-    assertAllowedCommand(IX_BIN, args);
-    const fullArgs = [...args, "--format", format];
+    assertAllowedCommand(IX_BIN);
+    const fullArgs = [...args, "--format", "json"];
     await debugLog(`CMD ${IX_BIN} ${fullArgs.join(" ")}`);
-    // Header stripping only applies to JSON (it skips prose lines before the
-    // first `[`/`{`). The `llm` format is bare key=value text with no JSON
-    // envelope, so we return its stdout verbatim — never parse it.
-    const clean = (raw) => (format === "json" ? stripHeader(raw) : raw);
     try {
         const launch = await ixLaunch(IX_BIN, fullArgs);
         const { stdout, stderr } = await execFileAsync(launch.file, launch.args, {
@@ -99,7 +78,7 @@ async function runIxFormat(args, format, opts = {}) {
         if (stderr.trim()) {
             await debugLog(`STDERR ${stderr.trim().slice(0, 300)}`);
         }
-        return { ok: true, stdout: clean(stdout), stderr, durationMs: Date.now() - start };
+        return { ok: true, stdout: stripHeader(stdout), stderr, durationMs: Date.now() - start };
     }
     catch (err) {
         const durationMs = Date.now() - start;
@@ -110,24 +89,13 @@ async function runIxFormat(args, format, opts = {}) {
             }
             return {
                 ok: false,
-                stdout: clean(err.stdout ?? ""),
+                stdout: stripHeader(err.stdout ?? ""),
                 stderr,
                 durationMs,
             };
         }
         return { ok: false, stdout: "", stderr: String(err), durationMs };
     }
-}
-// Default invocation: machine-readable JSON. Unchanged contract — every caller
-// that parses output (tools' fallback path, hooks, version probe) relies on this.
-export async function runIx(args, opts = {}) {
-    return runIxFormat(args, "json", opts);
-}
-// Token-optimized output for direct model consumption. Output is forwarded
-// verbatim (after secret redaction) and is NEVER parsed. Gated to ix >= 0.7.0
-// by the caller (see lib/llm.ts); older CLIs do not understand `--format llm`.
-export async function runIxLlm(args, opts = {}) {
-    return runIxFormat(args, "llm", opts);
 }
 // ── Parallel invocation ───────────────────────────────────────────────────────
 export async function runIxParallel(calls, opts = {}) {

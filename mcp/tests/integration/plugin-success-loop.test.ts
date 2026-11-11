@@ -33,31 +33,14 @@ interface HookResult {
 /**
  * `ix subsystems --format json` as the CLI emits it.
  *
- * Previously this was the envelope tools/subsystems.ts built around that output
- * — `{ok, tool, data:{subsystems, graph}}`. The tool layer moved into the CLI's
- * own `ix mcp`, so the hook loop is now checked against what `ix` actually
- * returns.
+ * Previously this was the envelope the plugin's own MCP tool built around that
+ * output — `{ok, tool, data:{subsystems, graph}}`. The tool layer moved into
+ * the CLI's own `ix mcp`, so the hook loop is now checked against what `ix`
+ * actually returns.
  */
 interface ToolResponse {
   map_rev?: number;
   regions?: Array<{ label?: string }>;
-}
-
-type ToolCallback = (rawInput: unknown, extra: unknown) => Promise<{
-  content: Array<{ type: string; text: string }>;
-}>;
-
-class FakeServer {
-  readonly callbacks = new Map<string, ToolCallback>();
-
-  tool(
-    name: string,
-    _description: string,
-    _paramsSchema: unknown,
-    cb: ToolCallback,
-  ): void {
-    this.callbacks.set(name, cb);
-  }
 }
 
 function fixtureEnv(tempDir: string, extra: Record<string, string> = {}): Record<string, string> {
@@ -207,7 +190,7 @@ async function invokeSubsystemsTool(env: Record<string, string>): Promise<ToolRe
 
   try {
     // Reads the graph through lib/cli, the layer the hooks use. This used to go
-    // through tools/subsystems; the CLI's own `ix mcp` serves those tools now,
+    // through the plugin's own MCP tool; the CLI's own `ix mcp` serves it now,
     // so what is left to prove here is that the hook loop's writes are visible
     // to a subsequent read, not how a tool wrapper shaped its envelope.
     const { runIx } = await import("../../lib/cli.js");
