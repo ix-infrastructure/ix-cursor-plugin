@@ -35,7 +35,6 @@ export const IX_HOOK_VERBOSITY = envChoice("IX_HOOK_VERBOSITY", ["silent", "brie
 // ── Timeouts (ms) ─────────────────────────────────────────────────────────────
 export const TIMEOUT_DEFAULT_MS = 15_000;
 export const TIMEOUT_MAP_MS = 60_000;
-export const TIMEOUT_HEALTH_MS = 5_000;
 // Returns the appropriate timeout for a given ix subcommand.
 export function timeoutFor(subcommand) {
     if (subcommand === "map")

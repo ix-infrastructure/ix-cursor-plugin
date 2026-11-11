@@ -14,12 +14,6 @@ const FIXTURE_DIR = resolve(TEST_DIR, "../fixtures/ix_outputs");
 const MOCK_IX_PATH = resolve(TEST_DIR, "../fixtures/bin/ix");
 process.env["IX_BIN"] = MOCK_IX_PATH;
 process.env["IX_HOOK_VERBOSITY"] = "brief";
-class FakeServer {
-    callbacks = new Map();
-    tool(name, _description, _paramsSchema, cb) {
-        this.callbacks.set(name, cb);
-    }
-}
 function fixtureEnv(tempDir, extra = {}) {
     return {
         IX_BIN: MOCK_IX_PATH,
@@ -136,7 +130,7 @@ async function invokeSubsystemsTool(env) {
     }
     try {
         // Reads the graph through lib/cli, the layer the hooks use. This used to go
-        // through tools/subsystems; the CLI's own `ix mcp` serves those tools now,
+        // through the plugin's own MCP tool; the CLI's own `ix mcp` serves it now,
         // so what is left to prove here is that the hook loop's writes are visible
         // to a subsequent read, not how a tool wrapper shaped its envelope.
         const { runIx } = await import("../../lib/cli.js");

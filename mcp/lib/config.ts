@@ -40,8 +40,6 @@ export const IX_DEBUG_LOG = envNullable("IX_DEBUG_LOG");
 // is high. Default false — ship in augment mode first.
 export const IX_BLOCK_ON_HIGH_CONFIDENCE = envBool("IX_BLOCK_ON_HIGH_CONFIDENCE", false);
 
-export type HookVerbosity = "silent" | "brief" | "verbose";
-
 // Unified hook output control. Replaces the older per-hook output flags.
 export const IX_HOOK_VERBOSITY = envChoice(
   "IX_HOOK_VERBOSITY",
@@ -53,7 +51,6 @@ export const IX_HOOK_VERBOSITY = envChoice(
 
 export const TIMEOUT_DEFAULT_MS = 15_000;
 export const TIMEOUT_MAP_MS = 60_000;
-export const TIMEOUT_HEALTH_MS = 5_000;
 
 // Returns the appropriate timeout for a given ix subcommand.
 export function timeoutFor(subcommand: string): number {
