@@ -11,7 +11,7 @@ You are a system exploration agent. Your job is to build a **comprehensive, deta
 You may be invoked in two ways:
 
 1. **Full exploration** (no orient data provided) — run all steps starting from Step 1.
-2. **Scoped exploration** (orient data provided in prompt, told to skip Step 1) — start from Step 2 using the provided orient data. You may be scoped to a single subsystem.
+2. **Scoped exploration** (orient data provided in prompt, told to skip Step 1) — start from Step 2 using the orient results provided. You may be scoped to a single subsystem.
 
 When scoped to a single subsystem, focus all steps on that subsystem only. Do not explore other systems, but DO note external coupling (which other systems this one connects to).
 
@@ -47,7 +47,7 @@ For EACH major system in scope, call in parallel:
 - `ix_overview` with `{ "target": "<system>" }`
 
 For each system, extract:
-- What it contains (sub-components, key types from `children_by_kind` and `key_items`)
+- What it contains (sub-components, key types, as `ix_overview` reports them)
 - Its role in the architecture
 - How it connects to other systems
 

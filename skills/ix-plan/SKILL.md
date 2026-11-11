@@ -13,7 +13,7 @@ Strip `--save` and any following path token from `$ARGUMENTS` before resolving t
 
 ## Pro check (optional)
 
-Call `ix_briefing` with `{}`. If `ok` is `true`, Pro is available. Extract `data.goals`, `data.plans`, and `data.decisions` for use in Pro steps below. If it returns `ok: false`, skip all **[Pro]** labeled steps.
+If the `ix_briefing` tool is not available in this session, skip every **[Pro]** step below: `ix mcp` lists it only when Ix Pro is installed, so do not call it to find out. If it is available, call it with `{}` and keep the active goals, active plans and recent decisions it reports for the **[Pro]** steps.
 
 ## Goal
 
@@ -66,8 +66,8 @@ Identify if any third symbol depends on multiple targets (shared blast radius �
 ## Phase 5 — Project context **[Pro]**
 
 If Pro is available:
-- Check `data.plans` from the briefing result for existing plans overlapping this change.
-- Check `data.goals` for active goals this change serves.
+- Check the active plans from the briefing for existing plans overlapping this change.
+- Check the active goals from the briefing for goals this change serves.
 
 Cross-reference to avoid duplicate work. If an existing plan covers these targets, reference it. If active goals exist, note which goal this change serves.
 
@@ -106,7 +106,7 @@ After [target B]: verify [specific callers]
 - [any cross-subsystem boundary being crossed]
 
 ## Project context **[Pro]**
-- Goal this serves: [from briefing data.goals — omit if Pro unavailable]
+- Goal this serves: [from the briefing's active goals — omit if Pro unavailable]
 - Existing plan to track against: [plan title, or "none — suggest creating one"]
 ```
 

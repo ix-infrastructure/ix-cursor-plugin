@@ -13,7 +13,7 @@ Strip `--save` and any following path token from `$ARGUMENTS` before resolving t
 
 ## Pro check (optional)
 
-Call `ix_briefing` with `{}`. If `ok` is `true`, Pro is available. Extract `data.plans` for use in Pro steps below. If it returns `ok: false`, skip all **[Pro]** labeled steps.
+If the `ix_briefing` tool is not available in this session, skip every **[Pro]** step below: `ix mcp` lists it only when Ix Pro is installed, so do not call it to find out. If it is available, call it with `{}` and keep the active plans it reports for the **[Pro]** steps.
 
 ## Goal
 
@@ -25,18 +25,18 @@ Call both in parallel:
 - `ix_impact` with `{ "target": "<target from $ARGUMENTS>" }`
 - `ix_explain` with `{ "symbol": "<target from $ARGUMENTS>" }`
 
-**God-module check:** If `facts.calleeCount > 20 AND facts.callerCount < 2` in the `ix_explain` result:
+**God-module check:** If the `ix_explain` result reports more than 20 callees and fewer than 2 callers:
 > ⚠ This symbol has high callee count and low caller count — it reaches out to many dependents but has few callers. Standard blast-radius metrics may understate risk. Check callers of its key dependencies, not just direct dependents.
 
 This caveat applies regardless of the `ix_impact` risk classification.
 
-**Immediately classify using `risk_level` and `dependents` from the `ix_impact` result:**
+**Immediately classify using the `risk=` record and the reach count that `ix_impact` reports.** The reach count depends on the target kind: a leaf target (function, method) prints `counts callers= callees=`, so use `callers=`; a container (file, class, module) prints `dependents=`, so use that. Below, "dependents" means whichever of the two applies:
 
 | Risk level | Action |
 |---|---|
-| `low` + `dependents` < 3 | **STOP** — safe to proceed. Report and suggest verification targets. |
-| `medium` OR `dependents` 3–10 | Go to Phase 2 |
-| `high` or `critical` OR `dependents` > 10 | Go to Phase 2 + 3 |
+| `low` and fewer than 3 dependents | **STOP** — safe to proceed. Report and suggest verification targets. |
+| `medium` OR 3–10 dependents | Go to Phase 2 |
+| `high` or `critical` OR more than 10 dependents | Go to Phase 2 + 3 |
 
 ## Phase 2 — Callers and dependents (medium/high/critical)
 
@@ -44,7 +44,7 @@ Call both in parallel:
 - `ix_callers` with `{ "symbol": "<target>" }` (limit 15 per token-budgets rule)
 - `ix_depends` with `{ "symbol": "<target>", "depth": 2 }`
 
-Extract: direct callers by name and subsystem, transitive dependent count from `traversal.nodes_visited`.
+Extract: direct callers by name and subsystem, and the number of transitive dependents `ix_depends` reports.
 
 **Stop here if risk is `medium`:** report callers, suggest verification, done.
 
@@ -72,7 +72,7 @@ Cross-reference callers + dependents + importers to identify:
 
 **Key callers:** [top 5, with subsystem label]
 
-**At-risk behaviors:** [from ix_impact at_risk_behavior field]
+**At-risk behaviors:** [the at-risk behavior `ix_impact` describes, if any]
 
 **Recommended action:**
 - low: proceed, verify [specific callers]
@@ -84,7 +84,7 @@ Cross-reference callers + dependents + importers to identify:
 
 ## Phase 4 — Known bugs in blast radius **[Pro]**
 
-If Pro is available and `data.plans` from the briefing references this target area, cross-reference open plans against the direct callers and dependents identified in Phase 2. Any active plan touching the blast radius escalates the risk verdict — flag it explicitly in the output.
+If Pro is available and an active plan from the briefing references this target area, cross-reference open plans against the direct callers and dependents identified in Phase 2. Any active plan touching the blast radius escalates the risk verdict — flag it explicitly in the output.
 
 Never read source code in this skill. Risk analysis is purely graph-based.
 

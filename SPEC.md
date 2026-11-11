@@ -201,7 +201,7 @@ Field names such as `name`, `displayName`, `version`, `description`, `author`, `
 
 ## 2. MCP server
 
-The MCP server is the most important new component. It exposes Ix as typed tools that Cursor agents can call directly.
+The plugin ships no MCP server of its own. `mcp.json` starts `ix mcp --tools=all`, and the Ix CLI serves the tools.
 
 ### V1 tool inventory
 
@@ -224,69 +224,25 @@ The MCP server is the most important new component. It exposes Ix as typed tools
 - `ix_smells`
 - `ix_rank`
 - `ix_decisions`
+- `ix_decide`
 - `ix_map`
+- `ix_ingest`
 - `ix_read`
 - `ix_history`
 - `ix_diff`
 
+`ix_briefing`, `ix_decisions` and `ix_decide` are Pro tools: `ix mcp` lists them only when Ix Pro is installed.
+
 ### Tool contract
 
-Each MCP tool should:
+Most tools run their `ix` command with `--format llm` and hand the model that line-oriented text unchanged. The exceptions return JSON: `ix_map` and `ix_ingest` (run as JSON commands), `ix_smells` (always runs `ix smells --format json`), `ix_context` when called with `structured: true`, and the three Pro tools `ix_briefing`, `ix_decisions` and `ix_decide`. There is no plugin-side envelope.
 
-1. Accept typed structured input
-2. Validate input before execution
-3. Call `ix ... --format json`
-4. Parse and normalize the result
-5. Return stable JSON with `ok`, `tool`, `input`, `summary`, `data`, `evidence`, and `timing_ms`
-6. Normalize failures into a consistent error shape
+Until #24 the plugin shipped its own server (`mcp/server.ts`, `mcp/tools/`) that wrapped every result as `{ok, tool, input, summary, data, evidence, timing_ms}`. That contract is gone, and the skills, agents and rules must not refer to it:
 
-### `--format llm` fast-path
+- Name result values in plain words (the risk level, the caller count), not as JSON field paths.
+- Decide whether Pro is available from the tool list. If `ix_briefing` is not available, skip every **[Pro]** step; never call it to find out.
 
-Single-command read tools that only re-project the response (`ix_subsystems`,
-`ix_stats`, `ix_overview`, `ix_inventory`, `ix_rank`, `ix_locate`, `ix_history`,
-`ix_callers`, `ix_callees`, `ix_imports`, `ix_imported_by`, `ix_depends`,
-`ix_trace`, `ix_text`) take a token-optimized fast-path: when the installed CLI
-is `>= 0.7.0`, they invoke `ix ... --format llm` and forward that compact text
-to the model verbatim (after secret redaction), cutting response tokens ~2-3x.
-The text is **never parsed** — `--format llm` is for model consumption only.
-
-This is strictly additive. The fast-path falls back to the standard
-`--format json` path (step 3 onward, byte-identical to before) on any of:
-older CLI, unknown-format/command error, empty output, or
-`IX_DISABLE_LLM_FORMAT=1`. Tools that derive fields or slice results
-client-side (`ix_impact`, `ix_smells`), commands that route `--format llm` to
-prose/source (`ix_explain`, `ix_read`), and all hooks keep `--format json`.
-
-### Example output
-
-```json
-{
-  "ok": true,
-  "tool": "ix_impact",
-  "input": {
-    "target": "src/foo.ts",
-    "depth": 2
-  },
-  "summary": "High-risk change area with 7 dependents",
-  "data": {
-    "risk_level": "high",
-    "dependents": 7,
-    "hotspots": ["src/bar.ts", "src/baz.ts"]
-  },
-  "evidence": [
-    { "kind": "graph", "id": "claim_123" },
-    { "kind": "symbol", "name": "FooService.update" }
-  ],
-  "timing_ms": 184
-}
-```
-
-### V1 implementation strategy
-
-- Build a thin wrapper layer in `mcp/tools/*.ts`
-- Centralize CLI invocation, timeouts, and stderr handling in `mcp/lib/cli.ts`
-- Parse JSON once and normalize in `mcp/lib/parser.ts`
-- Keep graph semantics inside Ix, not the plugin
+`mcp/tests/unit/skill-text.test.ts` enforces both.
 
 ## 3. Rules
 
@@ -583,6 +539,8 @@ Automatic issue filing should remain out of scope for the Cursor port.
 ## Standard Data Contracts
 
 These contracts should be shared across tools, hooks, skills, and ledgering.
+
+These are V1 design shapes. MCP tools do not return them (see the tool contract in section 2), so skills and agents must not refer to their field names.
 
 ### Risk result
 

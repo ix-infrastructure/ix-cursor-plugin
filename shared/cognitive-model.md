@@ -43,14 +43,14 @@ Tools grouped by intent — use the cheapest group that answers the question.
 
 ## Pro Tools
 
-Pro features require an Ix Pro backend. Detect availability by calling `ix_briefing` — if `ok` is `true`, Pro is active.
+Pro features require Ix Pro. `ix mcp` lists the Pro tools below only when Ix Pro is installed, so availability is the tool list, not a call: if `ix_briefing` is not available, Pro is not active and every **[Pro]** step is skipped.
 
 | Tier | Tools |
 |---|---|
 | **Standard** | `ix_subsystems`, `ix_overview`, `ix_locate`, `ix_text`, `ix_explain`, `ix_read`, `ix_trace`, `ix_callers`, `ix_callees`, `ix_imports`, `ix_imported_by`, `ix_depends`, `ix_impact`, `ix_inventory`, `ix_smells`, `ix_rank`, `ix_stats`, `ix_map`, `ix_history`, `ix_diff`, `ix_health` |
 | **Pro only** | `ix_briefing`, `ix_decisions` |
 
-`ix_briefing` result shape: `{ ok, data: { goals, plans, decisions, repo_orientation } }` — one call provides full project context for all Pro-aware steps.
+When it is available, one `ix_briefing` call reports the active goals, active plans and recent decisions: enough project context for all Pro-aware steps.
 
 ---
 
