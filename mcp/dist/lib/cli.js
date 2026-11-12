@@ -97,27 +97,6 @@ export async function runIx(args, opts = {}) {
         return { ok: false, stdout: "", stderr: String(err), durationMs };
     }
 }
-// ── Parallel invocation ───────────────────────────────────────────────────────
-export async function runIxParallel(calls, opts = {}) {
-    const settled = await Promise.allSettled(calls.map((c) => runIx(c.args, opts)));
-    const result = {};
-    for (let i = 0; i < calls.length; i++) {
-        const label = calls[i].label;
-        const outcome = settled[i];
-        if (outcome.status === "fulfilled") {
-            result[label] = outcome.value;
-        }
-        else {
-            result[label] = {
-                ok: false,
-                stdout: "",
-                stderr: String(outcome.reason),
-                durationMs: 0,
-            };
-        }
-    }
-    return result;
-}
 function isExecError(err) {
     return err instanceof Error && ("stdout" in err || "stderr" in err);
 }

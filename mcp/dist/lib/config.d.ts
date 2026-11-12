@@ -1,6 +1,10 @@
 export declare const IX_BIN: string;
 export declare const IX_DEBUG_LOG: string | null;
 export declare const IX_BLOCK_ON_HIGH_CONFIDENCE: boolean;
+export declare const IX_HOOK_SEARCH: boolean;
+export declare const IX_HOOK_SHELL_SEARCH: boolean;
+export declare const IX_HOOK_EDIT_IMPACT: boolean;
+export declare const IX_HOOK_BRIEFING: boolean;
 export declare const IX_HOOK_VERBOSITY: "silent" | "brief" | "verbose";
 export declare const TIMEOUT_DEFAULT_MS = 15000;
 export declare const TIMEOUT_MAP_MS = 60000;

@@ -25,7 +25,7 @@ import { realpath } from "node:fs/promises";
 import { basename, relative } from "node:path";
 
 import { checkHealth, runIx } from "../lib/cli.js";
-import { IX_HOOK_VERBOSITY } from "../lib/config.js";
+import { IX_HOOK_EDIT_IMPACT, IX_HOOK_VERBOSITY } from "../lib/config.js";
 import { parseIxJson } from "../lib/parser.js";
 import {
   ixRoot,
@@ -80,7 +80,7 @@ async function main(): Promise<void> {
 
   if (!filePath) process.exit(0);
   if (shouldSkip(filePath)) process.exit(0);
-  if (IX_HOOK_VERBOSITY === "silent") process.exit(0);
+  if (!IX_HOOK_EDIT_IMPACT || IX_HOOK_VERBOSITY === "silent") process.exit(0);
 
   // Run ix in the repo holding the file; skip files outside every workspace.
   const root = await ixRoot(input, filePath);
