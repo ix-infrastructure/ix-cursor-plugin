@@ -103,11 +103,13 @@ async function listTools(): Promise<ToolsList> {
 
   try {
     return await new Promise<ToolsList>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`no tools/list answer in 30s; stderr:\n${stderr}`)), 30_000);
       let buffer = "";
+      const stray: string[] = [];
+      const extra = (): string => (stray.length ? `\nnon-JSON lines on stdout:\n${stray.join("\n")}` : "");
+      const timer = setTimeout(() => reject(new Error(`no tools/list answer in 30s; stderr:\n${stderr}${extra()}`)), 30_000);
       child.on("close", (code) => {
         clearTimeout(timer);
-        reject(new Error(`\`${command} ${args.join(" ")}\` exited ${code}; stderr:\n${stderr}`));
+        reject(new Error(`\`${command} ${args.join(" ")}\` exited ${code}; stderr:\n${stderr}${extra()}`));
       });
       child.stdout.on("data", (d: Buffer) => {
         buffer += d.toString();
@@ -116,7 +118,15 @@ async function listTools(): Promise<ToolsList> {
           const line = buffer.slice(0, nl).trim();
           buffer = buffer.slice(nl + 1);
           if (!line) continue;
-          const msg = JSON.parse(line) as { id?: number; result?: unknown; error?: unknown };
+          let msg: { id?: number; result?: unknown; error?: unknown };
+          try {
+            msg = JSON.parse(line) as typeof msg;
+          } catch {
+            // MCP stdio allows only JSON-RPC on stdout. Keep going so a later
+            // answer still counts, and name the stray line if none comes.
+            stray.push(line);
+            continue;
+          }
           if (msg.id === 1) {
             if (msg.error) return reject(new Error(`initialize failed: ${JSON.stringify(msg.error)}`));
             send({ method: "notifications/initialized" });

@@ -25,14 +25,33 @@ import { PLUGIN_ROOT } from "../helpers/cursor-hooks.js";
 /** Bytes of always-on text the plugin may add to a session. */
 const ALWAYS_ON_LIMIT = 2048;
 function parse(path) {
-    const raw = readFileSync(path, "utf8");
+    return parseText(readFileSync(path, "utf8"), path);
+}
+/**
+ * Top-level `key: value` frontmatter fields. A value that goes on over more
+ * lines (a `>`/`|` block scalar, or a plain scalar continued on indented
+ * lines) is read in full, so a multi-line description is counted at its real
+ * size rather than as its first line.
+ */
+function parseText(raw, path) {
     const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
     assert.ok(match, `${path} has no YAML frontmatter`);
     const fields = {};
-    for (const line of match[1].split(/\r?\n/)) {
-        const kv = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(line);
-        if (kv)
-            fields[kv[1]] = kv[2].trim();
+    const lines = match[1].split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+        const kv = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(lines[i]);
+        if (!kv)
+            continue;
+        const head = kv[2].trim();
+        const more = [];
+        while (i + 1 < lines.length && (/^\s+\S/.test(lines[i + 1]) || (lines[i + 1].trim() === "" && /^\s+\S/.test(lines[i + 2] ?? "")))) {
+            more.push(lines[++i].trim());
+        }
+        const block = /^[>|][+-]?\d*$/.exec(head);
+        if (block)
+            fields[kv[1]] = more.join(head.startsWith("|") ? "\n" : " ");
+        else
+            fields[kv[1]] = [head, ...more].filter(Boolean).join(" ");
     }
     return { fields, body: raw.slice(match[0].length) };
 }
@@ -76,6 +95,19 @@ test("the always-on text stays under the limit", (t) => {
     t.diagnostic(`${sum}\ttotal (limit ${ALWAYS_ON_LIMIT})`);
     assert.ok(sum <= ALWAYS_ON_LIMIT, `always-on text is ${sum} bytes, over the ${ALWAYS_ON_LIMIT}-byte limit:\n` +
         parts.map((p) => `  ${p.bytes}\t${p.source}`).join("\n"));
+});
+test("frontmatter parsing counts multi-line descriptions in full", () => {
+    const text = "first line of a long description\nand its second line";
+    for (const [label, yaml] of [
+        ["folded", "description: >\n  first line of a long description\n  and its second line"],
+        ["literal", "description: |-\n  first line of a long description\n\n  and its second line"],
+        ["plain", "description: first line of a long description\n  and its second line"],
+    ]) {
+        const { fields } = parseText(`---\nname: x\n${yaml}\nalwaysApply: false\n---\nbody\n`, label);
+        assert.ok(bytes(fields["description"]) >= bytes(text) - 2, `${label}: description read as ${JSON.stringify(fields["description"])}`);
+        assert.equal(fields["alwaysApply"], "false", `${label}: the next key is still read`);
+        assert.equal(fields["name"], "x");
+    }
 });
 test("no rule is always applied", () => {
     // Their bodies restate what the skills and the tool descriptions say. Cursor

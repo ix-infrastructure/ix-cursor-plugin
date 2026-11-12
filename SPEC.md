@@ -637,7 +637,7 @@ Goal: restore the higher-level product experience.
 Deliverables:
 
 - All 8 skills
-- All 5 subagents
+- All 4 subagents
 - Read and trace budgets enforced in prompts and rules
 - Structured outputs
 
@@ -690,7 +690,7 @@ V1 is acceptable when all of the following are true:
 - Cursor can install and load the plugin successfully in IDE mode
 - The MCP server exposes a stable typed tool surface over the existing `ix` CLI
 - The rules reproduce the existing graph-first cognitive model
-- The eight skills and five subagents are available and usable
+- The eight skills and four subagents are available and usable
 - Pre-edit warnings and post-edit ingest work reliably
 - Prompt briefing is cached and silent on failure
 - Search interception defaults to safe augment behavior unless confidence is high
@@ -715,7 +715,7 @@ V1 is acceptable when all of the following are true:
 2. Build a thin MCP wrapper over the CLI.
 3. Port `skills/shared.md` into Cursor rules.
 4. Port the eight skills with minimal semantic changes.
-5. Port the five agents into subagents.
+5. Port the four agents that skills delegate to into subagents.
 6. Add briefing and pre-edit hooks first.
 7. Add post-edit ingest next.
 8. Add search interception only after measuring false positives.

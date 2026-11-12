@@ -42,6 +42,7 @@ Some of what the plugin ships reaches the model in every session, before you typ
 - **Skills**: every skill sets `disable-model-invocation: true`, so you run it as a slash command (`/ix-help`, `/ix-investigate`, ...). Its description is not offered to the model.
 - **Subagents**: only the four the skills hand work to ship. Cursor lists each one's name and description.
 - **MCP tools**: the `tools/list` answer from `ix mcp --tools=all` (see `mcp.json`), with a schema for every tool.
+- **Session briefing**: the `sessionStart` hook (`prompt-briefing`) adds the Ix Pro briefing as `additional_context` when Ix Pro is installed, the repo has active goals, plans or recent decisions, and `IX_HOOK_VERBOSITY` is not `silent`. Its size depends on that Pro content (`verbose` adds the full JSON), so the measurement below does not include it.
 
 Measured from this checkout, the rule descriptions plus subagent names and descriptions come to 1,258 bytes of always-on text, against a 2,048-byte limit. `mcp/tests/unit/always-on-size.test.ts` measures it in `npm test` and fails CI above the limit. Before this change the four always-applied rules alone were over 8 KB.
 
