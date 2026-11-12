@@ -1,6 +1,6 @@
 ---
 description: Anti-duplication rules for ix-memory hooks. Apply to avoid re-running work that hooks have already done in the current turn.
-alwaysApply: true
+alwaysApply: false
 ---
 
 ## No Duplicate Hook Work

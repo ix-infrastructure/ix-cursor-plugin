@@ -1,6 +1,6 @@
 ---
 description: Graph-first decision rules for ix-memory. Apply when exploring code, locating symbols, or answering structural questions.
-alwaysApply: true
+alwaysApply: false
 ---
 
 ## Graph-First Hierarchy

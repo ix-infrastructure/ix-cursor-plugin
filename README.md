@@ -34,6 +34,19 @@ Each hook uses an event whose output Cursor actually reads ([Cursor hooks refere
 
 `IX_HOOK_VERBOSITY=silent` turns off the text-producing hooks. `sessionStart` hooks do not run in Cursor cloud agents.
 
+## Per-Session Context
+
+Some of what the plugin ships reaches the model in every session, before you type anything and whether or not Ix is used:
+
+- **Rules**: none is always applied. Cursor lists each rule's description, and the agent reads a rule only when it applies. `docs-mode.mdc` also attaches when docs files are in context.
+- **Skills**: every skill sets `disable-model-invocation: true`, so you run it as a slash command (`/ix-help`, `/ix-investigate`, ...). Its description is not offered to the model.
+- **Subagents**: only the four the skills hand work to ship. Cursor lists each one's name and description.
+- **MCP tools**: the `tools/list` answer from `ix mcp --tools=all` (see `mcp.json`), with a schema for every tool.
+
+Measured from this checkout, the rule descriptions plus subagent names and descriptions come to 1,258 bytes of always-on text, against a 2,048-byte limit. `mcp/tests/unit/always-on-size.test.ts` measures it in `npm test` and fails CI above the limit. Before this change the four always-applied rules alone were over 8 KB.
+
+The tool listing comes from the Ix CLI, not from this repo. The `real ix` CI job (`mcp/tests/real-ix/catalog.real-ix.ts`) starts the server the way `mcp.json` does, prints the listing's size, and fails if a skill, agent or rule names a tool the catalog does not have.
+
 ## Prerequisites
 
 - Cursor desktop installed

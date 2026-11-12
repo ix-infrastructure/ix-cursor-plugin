@@ -158,7 +158,6 @@ ix-cursor-plugin/
 │   ├── ix-architecture/
 │   └── ix-docs/
 ├── agents/
-│   ├── ix-explorer.md
 │   ├── ix-system-explorer.md
 │   ├── ix-bug-investigator.md
 │   ├── ix-safe-refactor-planner.md
@@ -248,6 +247,8 @@ Until #24 the plugin shipped its own server (`mcp/server.ts`, `mcp/tools/`) that
 
 Rules are the Cursor-native home for the shared cognitive model now stored in `ix-claude-plugin/skills/shared.md`.
 
+No rule is always applied (`alwaysApply: false`): Cursor lists each rule's description and the agent reads the rule when it applies, and `docs-mode.mdc` also attaches to docs files through its globs. `mcp/tests/unit/always-on-size.test.ts` enforces this.
+
 ### `graph-first.mdc`
 
 - Orient before diving
@@ -286,6 +287,8 @@ Rules are the Cursor-native home for the shared cognitive model now stored in `i
 ## 4. Skills
 
 The eight Claude skills map almost directly into Cursor skills.
+
+Every skill sets `disable-model-invocation: true`, so it runs only as a slash command and its description is not offered to the model in every session.
 
 | Claude skill | Cursor skill | Notes |
 |---|---|---|
@@ -329,11 +332,10 @@ Expected flow:
 
 ## 5. Subagents
 
-The existing Claude agents should port directly into Cursor subagents.
+The existing Claude agents should port directly into Cursor subagents. Only the agents a skill delegates to ship: Cursor lists every subagent's description in every session.
 
 ### Subagent inventory
 
-- `ix-explorer`
 - `ix-system-explorer`
 - `ix-bug-investigator`
 - `ix-safe-refactor-planner`
