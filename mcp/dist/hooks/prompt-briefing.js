@@ -19,7 +19,7 @@
 //   exit 0 + no stdout                   → nothing added
 //   never exit non-zero
 import { checkHealth, runIx } from "../lib/cli.js";
-import { IX_HOOK_VERBOSITY } from "../lib/config.js";
+import { IX_HOOK_BRIEFING, IX_HOOK_VERBOSITY } from "../lib/config.js";
 import { parseIxJson } from "../lib/parser.js";
 import { gitRoot, projectDirs } from "../shared/auto-map.js";
 import { withCache } from "../shared/cache.js";
@@ -65,7 +65,7 @@ async function main() {
     // composer_mode. A missing payload falls back to CURSOR_PROJECT_DIR.
     const input = await readHookInput();
     const workspaceRoots = input?.workspace_roots;
-    if (IX_HOOK_VERBOSITY === "silent") {
+    if (!IX_HOOK_BRIEFING || IX_HOOK_VERBOSITY === "silent") {
         process.exit(0);
     }
     // Health gate — exit silently if ix is not available

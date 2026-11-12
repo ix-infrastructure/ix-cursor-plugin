@@ -24,11 +24,6 @@ export interface IxRunOptions {
   cwd?: string;
 }
 
-export interface ParallelCall {
-  args: string[];
-  label: string;
-}
-
 // ── Debug log ─────────────────────────────────────────────────────────────────
 
 async function debugLog(message: string): Promise<void> {
@@ -132,34 +127,6 @@ export async function runIx(
     }
     return { ok: false, stdout: "", stderr: String(err), durationMs };
   }
-}
-
-// ── Parallel invocation ───────────────────────────────────────────────────────
-
-export async function runIxParallel(
-  calls: ParallelCall[],
-  opts: IxRunOptions = {},
-): Promise<Record<string, IxResult>> {
-  const settled = await Promise.allSettled(
-    calls.map((c) => runIx(c.args, opts)),
-  );
-
-  const result: Record<string, IxResult> = {};
-  for (let i = 0; i < calls.length; i++) {
-    const label = calls[i]!.label;
-    const outcome = settled[i]!;
-    if (outcome.status === "fulfilled") {
-      result[label] = outcome.value;
-    } else {
-      result[label] = {
-        ok: false,
-        stdout: "",
-        stderr: String(outcome.reason),
-        durationMs: 0,
-      };
-    }
-  }
-  return result;
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────

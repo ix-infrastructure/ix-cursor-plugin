@@ -55,7 +55,7 @@ function fixtureEnv(tempDir: string, extra: Record<string, string> = {}): Record
     IX_MOCK_SUBSYSTEMS_AFTER_MAP_FILE: join(FIXTURE_DIR, "subsystems_after_map.json"),
     IX_MOCK_IMPACT_FILE: join(FIXTURE_DIR, "impact_high.json"),
     IX_MOCK_MAP_LOG_FILE: join(tempDir, "map.log"),
-    IX_MOCK_TEXT_FILE: join(FIXTURE_DIR, "text_hits.json"),
+    IX_MOCK_CALLERS_FILE: join(FIXTURE_DIR, "callers.json"),
     CURSOR_PROJECT_DIR: "/repo",
     TMPDIR: tempDir,
     // Plugin state (caches, debounce stamps) is per-user; keep it per-test.
@@ -320,13 +320,53 @@ test("edit-impact ignores a write outside every workspace root", { concurrency: 
   assert.deepEqual(await readLogLines(requiredEnv(env, "IX_MOCK_LOG_FILE")), []);
 });
 
-test("Grep gets graph context after it runs; preToolUse stays out of the way unless blocking is on", { concurrency: false }, async (t) => {
+// What a symbol search hook adds when `ix locate` resolves one definition:
+// where it is defined and who calls it. Nothing about text hits — the search
+// the agent just ran already returned those.
+const SESSION_MANAGER_CONTEXT =
+  "[ix] 'SessionManager': class defined in src/session/manager.ts; " +
+  "2 callers: createSession (src/session/index.ts), open (src/store/session-store.ts)";
+
+test("search hooks are off by default and run no ix at all", { concurrency: false }, async (t) => {
   const tempDir = await realpath(await mkdtemp(join(tmpdir(), "ix-cursor-itest-")));
   t.after(async () => {
     await rm(tempDir, { recursive: true, force: true });
   });
   const repo = await gitRepo(join(tempDir, "repo"));
   const env = fixtureEnv(tempDir, { IX_MOCK_LOCATE_FILE: join(FIXTURE_DIR, "locate_resolved.json") });
+
+  const grep = await runRegistered(
+    "pre-search",
+    () => ({ tool_name: "Grep", tool_input: { pattern: "SessionManager" }, tool_use_id: "tu-6", cwd: repo }),
+    env,
+    [repo],
+  );
+  assert.deepEqual(Object.fromEntries(grep), { preToolUse: {}, postToolUse: {} });
+  const shell = await runRegistered(
+    "shell-search",
+    () => ({
+      tool_name: "Shell",
+      tool_input: { command: "rg SessionManager src", working_directory: repo },
+      tool_use_id: "tu-7",
+      cwd: repo,
+    }),
+    env,
+    [repo],
+  );
+  assert.deepEqual(Object.fromEntries(shell), { postToolUse: {} });
+  assert.deepEqual(await readLogLines(requiredEnv(env, "IX_MOCK_LOG_FILE")), []);
+});
+
+test("Grep gets the definition and its callers after it runs; preToolUse stays out of the way unless blocking is on", { concurrency: false }, async (t) => {
+  const tempDir = await realpath(await mkdtemp(join(tmpdir(), "ix-cursor-itest-")));
+  t.after(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+  const repo = await gitRepo(join(tempDir, "repo"));
+  const env = fixtureEnv(tempDir, {
+    IX_MOCK_LOCATE_FILE: join(FIXTURE_DIR, "locate_resolved.json"),
+    IX_HOOK_SEARCH: "true",
+  });
   const grep = () => ({
     tool_name: "Grep",
     tool_input: { pattern: "SessionManager", path: join(repo, "src") },
@@ -337,18 +377,21 @@ test("Grep gets graph context after it runs; preToolUse stays out of the way unl
   const outputs = await runRegistered("pre-search", grep, env, [repo]);
   assert.deepEqual([...outputs.keys()].sort(), ["postToolUse", "preToolUse"]);
 
-  // Augment (default): nothing before the Grep, the summary after it.
+  // Augment: nothing before the Grep, the definition and callers after it.
   assert.deepEqual(outputs.get("preToolUse"), {});
   const context = modelVisibleText("postToolUse", outputs.get("postToolUse")!);
-  assert.match(context, /symbol: SessionManager, class, manager\.ts/);
-  assert.match(context, /2 text hits in manager\.ts, index\.ts/);
+  assert.equal(context, SESSION_MANAGER_CONTEXT);
+  assert.doesNotMatch(context, /text hits|Prefer/);
 
-  // An absolute Grep path becomes the workspace-relative path `ix text` takes.
+  // locate, then callers of what it resolved — no `ix text`.
   const log = await readLogLines(requiredEnv(env, "IX_MOCK_LOG_FILE"));
-  assert.ok(log.includes(`text SessionManager --limit 15 --path src --format json\tcwd=${repo}`), log.join("\n"));
-  assert.ok(log.includes(`locate SessionManager --format json\tcwd=${repo}`), log.join("\n"));
+  assert.deepEqual(log, [
+    `locate SessionManager --format json\tcwd=${repo}`,
+    `callers SessionManager --format json\tcwd=${repo}`,
+  ]);
 
-  // Opt-in blocking: a deny whose agent_message carries the summary, exit 0.
+  // Opt-in blocking works on its own switch: a deny whose agent_message
+  // carries the same summary, exit 0.
   const blocking = fixtureEnv(tempDir, {
     IX_MOCK_LOCATE_FILE: join(FIXTURE_DIR, "locate_resolved.json"),
     IX_BLOCK_ON_HIGH_CONFIDENCE: "true",
@@ -356,16 +399,46 @@ test("Grep gets graph context after it runs; preToolUse stays out of the way unl
   const blocked = await runRegistered("pre-search", grep, blocking, [repo], "preToolUse");
   const denied = blocked.get("preToolUse")!;
   assert.equal(denied["permission"], "deny");
-  assert.match(modelVisibleText("preToolUse", denied), /symbol: SessionManager/);
+  assert.equal(modelVisibleText("preToolUse", denied), SESSION_MANAGER_CONTEXT);
 });
 
-test("shell grep gets graph context after the command runs, in the command's repo", { concurrency: false }, async (t) => {
+test("search context names the definition alone when callers has no answer", { concurrency: false }, async (t) => {
   const tempDir = await realpath(await mkdtemp(join(tmpdir(), "ix-cursor-itest-")));
   t.after(async () => {
     await rm(tempDir, { recursive: true, force: true });
   });
   const repo = await gitRepo(join(tempDir, "repo"));
-  const env = fixtureEnv(tempDir, { IX_MOCK_LOCATE_FILE: join(FIXTURE_DIR, "locate_resolved.json") });
+  const refusal = join(tempDir, "callers-refusal.json");
+  await writeFile(refusal, JSON.stringify({ error: "workspace_not_mapped", message: "Run `ix map` first." }));
+  const noCallers = join(tempDir, "callers-none.json");
+  await writeFile(noCallers, JSON.stringify({ results: [], summary: { total: 0 } }));
+  const grep = () => ({ tool_name: "Grep", tool_input: { pattern: "SessionManager" }, tool_use_id: "tu-8", cwd: repo });
+
+  for (const [body, exit, expected] of [
+    [refusal, "4", "[ix] 'SessionManager': class defined in src/session/manager.ts"],
+    [noCallers, "0", "[ix] 'SessionManager': class defined in src/session/manager.ts; no callers in the graph"],
+  ] as const) {
+    const env = fixtureEnv(tempDir, {
+      IX_MOCK_LOCATE_FILE: join(FIXTURE_DIR, "locate_resolved.json"),
+      IX_MOCK_CALLERS_FILE: body,
+      IX_MOCK_CALLERS_EXIT: exit,
+      IX_HOOK_SEARCH: "true",
+    });
+    const outputs = await runRegistered("pre-search", grep, env, [repo], "postToolUse");
+    assert.equal(modelVisibleText("postToolUse", outputs.get("postToolUse")!), expected);
+  }
+});
+
+test("shell grep gets the definition and its callers after the command runs, in the command's repo", { concurrency: false }, async (t) => {
+  const tempDir = await realpath(await mkdtemp(join(tmpdir(), "ix-cursor-itest-")));
+  t.after(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+  const repo = await gitRepo(join(tempDir, "repo"));
+  const env = fixtureEnv(tempDir, {
+    IX_MOCK_LOCATE_FILE: join(FIXTURE_DIR, "locate_resolved.json"),
+    IX_HOOK_SHELL_SEARCH: "true",
+  });
 
   const outputs = await runRegistered(
     "shell-search",
@@ -382,9 +455,56 @@ test("shell grep gets graph context after the command runs, in the command's rep
 
   assert.deepEqual([...outputs.keys()], ["postToolUse"]);
   const context = modelVisibleText("postToolUse", outputs.get("postToolUse")!);
-  assert.match(context, /bash grep intercepted for 'SessionManager'/);
-  assert.match(context, /symbol: SessionManager/);
-  await waitForLogLine(requiredEnv(env, "IX_MOCK_LOG_FILE"), `locate SessionManager --format json\tcwd=${repo}`);
+  assert.equal(context, SESSION_MANAGER_CONTEXT);
+  assert.deepEqual(await readLogLines(requiredEnv(env, "IX_MOCK_LOG_FILE")), [
+    `locate SessionManager --format json\tcwd=${repo}`,
+    `callers SessionManager --format json\tcwd=${repo}`,
+  ]);
+});
+
+test("each context hook has its own off switch", { concurrency: false }, async (t) => {
+  const { tempDir, repo, file } = await editFixture(t);
+  const locate = join(FIXTURE_DIR, "locate_resolved.json");
+  const grep = () => ({ tool_name: "Grep", tool_input: { pattern: "SessionManager" }, tool_use_id: "tu-9", cwd: repo });
+  const shell = () => ({
+    tool_name: "Shell",
+    tool_input: { command: "rg SessionManager", working_directory: repo },
+    tool_use_id: "tu-10",
+    cwd: repo,
+  });
+  const briefing = () => ({ session_id: "conv-2", is_background_agent: false, composer_mode: "agent" });
+  const contextOf = async (name: string, input: (event: string) => Record<string, unknown>, env: Record<string, string>) => {
+    const event = name === "prompt-briefing" ? "sessionStart" : "postToolUse";
+    const outputs = await runRegistered(name, input, env, [repo], event);
+    return modelVisibleText(event, outputs.get(event)!);
+  };
+
+  // Every hook on: each one speaks.
+  const allOn = {
+    IX_MOCK_LOCATE_FILE: locate,
+    IX_HOOK_SEARCH: "true",
+    IX_HOOK_SHELL_SEARCH: "true",
+    IX_HOOK_EDIT_IMPACT: "true",
+    IX_HOOK_BRIEFING: "true",
+  };
+  const hooks = [
+    ["pre-search", grep, "IX_HOOK_SEARCH"],
+    ["shell-search", shell, "IX_HOOK_SHELL_SEARCH"],
+    ["edit-impact", writeInput(file, repo), "IX_HOOK_EDIT_IMPACT"],
+    ["prompt-briefing", briefing, "IX_HOOK_BRIEFING"],
+  ] as const;
+  for (const [name, input] of hooks) {
+    assert.notEqual(await contextOf(name, input, fixtureEnv(tempDir, allOn)), "", `${name} speaks when on`);
+  }
+  // Turning one off silences that hook and no other.
+  for (const [off, , flag] of hooks) {
+    const env = fixtureEnv(tempDir, { ...allOn, [flag]: "false" });
+    for (const [name, input] of hooks) {
+      const text = await contextOf(name, input, env);
+      if (name === off) assert.equal(text, "", `${flag}=false silences ${name}`);
+      else assert.notEqual(text, "", `${flag}=false leaves ${name} on`);
+    }
+  }
 });
 
 // ── Ix#853 exit codes ─────────────────────────────────────────────────────────
@@ -491,18 +611,12 @@ test("edit-impact answers ix exits 2, 3 and 4 exactly as exit 1 with the same bo
   await waitForLogLine(requiredEnv(fixtureEnv(tempDir), "IX_MOCK_LOG_FILE"), `impact src/shared.ts --format json\tcwd=${repo}`);
 });
 
-function assertSearchContext(name: string, context: string): void {
-  // ix text is not a graph lookup and still answers; only locate refuses.
-  assert.match(context, /2 text hits in manager\.ts, index\.ts/, name);
-  switch (name) {
-    case "usable body":
-      assert.match(context, /symbol: SessionManager, class, manager\.ts/, name);
-      break;
-    case "ambiguous_target":
-      assert.match(context, /candidates: SessionManager \(class\), SessionManager \(interface\)/, name);
-      break;
-    default:
-      assert.doesNotMatch(context, /symbol:|candidates:|unresolved_target|workspace_not_mapped/, name);
+/** Only a resolved definition produces context; every refusal is silence. */
+function assertSearchContext(name: string, output: Record<string, unknown>): void {
+  if (name === "usable body") {
+    assert.equal(modelVisibleText("postToolUse", output), SESSION_MANAGER_CONTEXT, name);
+  } else {
+    assert.deepEqual(output, {}, `${name} is no single definition`);
   }
 }
 
@@ -527,11 +641,12 @@ test("Grep hook answers ix locate exits 2, 3 and 4 exactly as exit 1 with the sa
         IX_MOCK_LOCATE_FILE: body,
         IX_MOCK_LOCATE_EXIT: String(exit),
         IX_BLOCK_ON_HIGH_CONFIDENCE: "true",
+        IX_HOOK_SEARCH: "true",
       });
     const outputs = await assertExitsAnswerLikeExit1("locate", envAt, (env) =>
       runRegistered("pre-search", grep, env, [repo]),
     );
-    assertSearchContext(name, modelVisibleText("postToolUse", outputs.get("postToolUse")!));
+    assertSearchContext(name, outputs.get("postToolUse")!);
     if (name === "usable body") {
       assert.equal(outputs.get("preToolUse")!["permission"], "deny", name);
     } else {
@@ -557,12 +672,18 @@ test("shell grep hook answers ix locate exits 2, 3 and 4 exactly as exit 1 with 
 
   for (const { name, file: body } of bodies) {
     const envAt = (exit: number) =>
-      fixtureEnv(tempDir, { IX_MOCK_LOCATE_FILE: body, IX_MOCK_LOCATE_EXIT: String(exit) });
+      fixtureEnv(tempDir, {
+        IX_MOCK_LOCATE_FILE: body,
+        IX_MOCK_LOCATE_EXIT: String(exit),
+        IX_HOOK_SHELL_SEARCH: "true",
+      });
     const outputs = await assertExitsAnswerLikeExit1("locate", envAt, (env) =>
       runRegistered("shell-search", shell, env, [repo]),
     );
-    assertSearchContext(name, modelVisibleText("postToolUse", outputs.get("postToolUse")!));
+    assertSearchContext(name, outputs.get("postToolUse")!);
   }
+  // The silent cases are silent because of the body, not because ix never ran.
+  await waitForLogLine(requiredEnv(fixtureEnv(tempDir), "IX_MOCK_LOG_FILE"), `locate SessionManager --format json\tcwd=${repo}`);
 });
 
 test("post-edit hook requests the guarded root map and a follow-up query sees the updated graph", { concurrency: false }, async (t) => {

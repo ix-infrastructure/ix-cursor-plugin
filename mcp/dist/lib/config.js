@@ -27,9 +27,23 @@ export const IX_BIN = envStr("IX_BIN", "ix");
 // ── Logging ───────────────────────────────────────────────────────────────────
 export const IX_DEBUG_LOG = envNullable("IX_DEBUG_LOG");
 // ── Behaviour flags ───────────────────────────────────────────────────────────
-// When true, the pre-search hook blocks the native Grep/Glob if ix confidence
-// is high. Default false — ship in augment mode first.
+// When true, the pre-search hook blocks the native Grep if ix confidence
+// is high. Default false — ship in augment mode first. Independent of
+// IX_HOOK_SEARCH: blocking is its own opt-in.
 export const IX_BLOCK_ON_HIGH_CONFIDENCE = envBool("IX_BLOCK_ON_HIGH_CONFIDENCE", false);
+// One switch per hook that adds text for the model, so each can be turned off
+// on its own. IX_HOOK_VERBOSITY=silent still turns all of them off together.
+//
+// The two search hooks are off by default, as in the Claude Code plugin they
+// were ported from: each costs two ix calls after a search, and what it adds
+// (where a name is defined and who calls it) the agent can get from
+// ix_locate and ix_callers when it wants it.
+// The briefing and edit-impact hooks say something the agent would not
+// otherwise ask for, so they stay on.
+export const IX_HOOK_SEARCH = envBool("IX_HOOK_SEARCH", false);
+export const IX_HOOK_SHELL_SEARCH = envBool("IX_HOOK_SHELL_SEARCH", false);
+export const IX_HOOK_EDIT_IMPACT = envBool("IX_HOOK_EDIT_IMPACT", true);
+export const IX_HOOK_BRIEFING = envBool("IX_HOOK_BRIEFING", true);
 // Unified hook output control. Replaces the older per-hook output flags.
 export const IX_HOOK_VERBOSITY = envChoice("IX_HOOK_VERBOSITY", ["silent", "brief", "verbose"], "brief");
 // ── Timeouts (ms) ─────────────────────────────────────────────────────────────

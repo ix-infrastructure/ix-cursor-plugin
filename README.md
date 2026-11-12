@@ -27,12 +27,14 @@ Each hook uses an event whose output Cursor actually reads ([Cursor hooks refere
 |---|---|---|
 | `sessionStart` | `prompt-briefing` | Ix Pro briefing (goals, plans, decisions) as `additional_context` in the new conversation |
 | `postToolUse` `Write` | `edit-impact` | Blast-radius warning after an edit to a file with many dependents |
-| `postToolUse` `Grep` | `pre-search` | Graph view of a symbol-like search (`ix locate` + `ix text`) after the search |
-| `preToolUse` `Grep` | `pre-search` | Nothing, unless `IX_BLOCK_ON_HIGH_CONFIDENCE=true`: then a confident match denies the Grep and returns the graph answer |
-| `postToolUse` `Shell` | `shell-search` | Same graph view for `grep`/`rg` run in the shell |
+| `postToolUse` `Grep` | `pre-search` | Off by default (`IX_HOOK_SEARCH=true` turns it on). After a symbol-like search: where the name is defined and who calls it (`ix locate`, then `ix callers`). Nothing when `ix locate` has no single confident definition |
+| `preToolUse` `Grep` | `pre-search` | Nothing, unless `IX_BLOCK_ON_HIGH_CONFIDENCE=true`: then a confident definition denies the Grep and returns the same line instead |
+| `postToolUse` `Shell` | `shell-search` | Off by default (`IX_HOOK_SHELL_SEARCH=true` turns it on). The same line for `grep`/`rg` run in the shell |
 | `afterFileEdit`, `stop` | `post-edit-ingest`, `debounced-map` | Nothing; they refresh an already-mapped repo's graph in the background |
 
-`IX_HOOK_VERBOSITY=silent` turns off the text-producing hooks. `sessionStart` hooks do not run in Cursor cloud agents.
+Each hook that adds text has its own switch: `IX_HOOK_BRIEFING` and `IX_HOOK_EDIT_IMPACT` (on by default), `IX_HOOK_SEARCH` and `IX_HOOK_SHELL_SEARCH` (off by default). Set one to `false` (or `true`) to change just that hook. `IX_HOOK_VERBOSITY=silent` turns all four off together. `sessionStart` hooks do not run in Cursor cloud agents.
+
+A `hooks.json` entry cannot depend on an environment variable, so `pre-search` stays registered for both Grep events even when it is switched off. Each Grep then starts two short Node processes that exit before running `ix`.
 
 ## Prerequisites
 
