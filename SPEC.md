@@ -288,7 +288,7 @@ No rule is always applied (`alwaysApply: false`): Cursor lists each rule's descr
 
 The eight Claude skills map almost directly into Cursor skills.
 
-Every skill sets `disable-model-invocation: true`, so it runs only as a slash command and its description is not offered to the model in every session.
+Every skill sets `disable-model-invocation: true`, so it runs only as a slash command. Cursor's skill documentation says such a skill's description is then not offered to the model in every session; that has not been checked in a running Cursor, so the README gives the always-on size both ways.
 
 | Claude skill | Cursor skill | Notes |
 |---|---|---|

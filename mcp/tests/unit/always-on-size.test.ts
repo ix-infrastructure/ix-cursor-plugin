@@ -71,7 +71,12 @@ interface Part {
   bytes: number;
 }
 
-function alwaysOnParts(): Part[] {
+/**
+ * `honourSkillOptOut: false` gives the figure if Cursor listed every skill's
+ * description whatever `disable-model-invocation` says. Cursor's skill docs
+ * say it does not, but no test here runs Cursor, so the README states both.
+ */
+function alwaysOnParts({ honourSkillOptOut = true } = {}): Part[] {
   const parts: Part[] = [];
 
   const rulesDir = join(PLUGIN_ROOT, "rules");
@@ -84,7 +89,7 @@ function alwaysOnParts(): Part[] {
   const skillsDir = join(PLUGIN_ROOT, "skills");
   for (const skill of readdirSync(skillsDir).sort()) {
     const { fields } = parse(join(skillsDir, skill, "SKILL.md"));
-    if (fields["disable-model-invocation"] === "true") continue;
+    if (honourSkillOptOut && fields["disable-model-invocation"] === "true") continue;
     parts.push({
       source: `skills/${skill} (name + description)`,
       bytes: bytes(fields["name"] ?? "") + bytes(fields["description"] ?? ""),
@@ -110,6 +115,7 @@ test("the always-on text stays under the limit", (t) => {
   for (const p of parts) t.diagnostic(`${p.bytes}\t${p.source}`);
   const sum = total(parts);
   t.diagnostic(`${sum}\ttotal (limit ${ALWAYS_ON_LIMIT})`);
+  t.diagnostic(`${total(alwaysOnParts({ honourSkillOptOut: false }))}\ttotal if Cursor also listed slash-command-only skills`);
   assert.ok(
     sum <= ALWAYS_ON_LIMIT,
     `always-on text is ${sum} bytes, over the ${ALWAYS_ON_LIMIT}-byte limit:\n` +
@@ -170,4 +176,20 @@ test("the README records the current always-on size", () => {
     `README.md should say "${sum} bytes of always-on text"`,
   );
   assert.ok(readme.includes(`${ALWAYS_ON_LIMIT.toLocaleString("en-US")}-byte limit`), "README.md should state the limit");
+  const worst = total(alwaysOnParts({ honourSkillOptOut: false })).toLocaleString("en-US");
+  assert.ok(
+    readme.includes(`${worst} bytes in all`),
+    `README.md should say "${worst} bytes in all" for a Cursor that lists slash-command-only skills too`,
+  );
+});
+
+test("the hook-deduplication rule's description carries the instruction", () => {
+  // The rule is agent-requested, so after a hook adds context the model may
+  // see only this description. It has to say what to do, and name the marker
+  // the hooks' context starts with so the model can tell when it applies.
+  const { fields } = parse(join(PLUGIN_ROOT, "rules", "no-duplicate-hook-work.mdc"));
+  const description = fields["description"] ?? "";
+  assert.match(description, /`\[ix`/, "name the `[ix` marker hook context starts with");
+  assert.match(description, /\breuse\b/i, "tell the model to reuse hook context");
+  assert.match(description, /instead of re-running/i, "tell the model not to repeat the lookup");
 });
