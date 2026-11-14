@@ -2,7 +2,7 @@
 name: ix-architecture
 description: Analyze system design — structure, coupling, code smells, and high-risk hotspots. Purely graph-based, no code reads.
 disable-model-invocation: true
-argument-hint: [path or subsystem name — empty for whole repo] [--save [path]]
+argument-hint: "[path or subsystem name — empty for whole repo] [--save [path]]"
 ---
 
 ## Argument parsing

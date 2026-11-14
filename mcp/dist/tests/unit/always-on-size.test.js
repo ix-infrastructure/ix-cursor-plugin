@@ -132,6 +132,84 @@ test("every skill is a slash command only", () => {
         assert.equal(fields["disable-model-invocation"], "true", `skills/${skill}: set disable-model-invocation: true`);
     }
 });
+/**
+ * Why a one-line frontmatter value would make a strict YAML parser reject the
+ * whole block, or "" if it would not. A rejected block loses every field in
+ * it, `disable-model-invocation` included, and parseText above is lenient
+ * enough not to notice. Covers the mistakes a hand-written value can make: an
+ * unquoted value that opens with `[` or `{` but is not one flow collection, an
+ * unterminated quote, a leading indicator character, and `: ` or ` #` inside
+ * a plain scalar.
+ */
+function strictYamlProblem(value) {
+    const v = value.trim();
+    if (v === "" || /^[>|][+-]?\d*$/.test(v))
+        return "";
+    if (v.startsWith('"'))
+        return /^"(?:[^"\\]|\\.)*"$/.test(v) ? "" : "unterminated double-quoted string";
+    if (v.startsWith("'"))
+        return /^'(?:[^']|'')*'$/.test(v) ? "" : "unterminated single-quoted string";
+    if (v.startsWith("[") || v.startsWith("{")) {
+        // A JSON array or object is a valid YAML flow collection; anything else
+        // starting with a bracket (`[target] [--save]`) is not.
+        try {
+            JSON.parse(v);
+            return "";
+        }
+        catch {
+            return "starts with a bracket but is not one flow collection; quote it";
+        }
+    }
+    if (/^[&*!%@`]|^[-?:](\s|$)/.test(v))
+        return "starts with a YAML indicator; quote it";
+    if (/: | #|:$/.test(v))
+        return "has `: ` or ` #` in a plain scalar; quote it";
+    return "";
+}
+test("strictYamlProblem rejects the values strict YAML rejects", () => {
+    for (const bad of [
+        "[target] [--shallow (default) | --medium | --deep] [--save [path]]",
+        "[path or subsystem name — empty for whole repo] [--save [path]]",
+        '"unterminated',
+        "*alias text",
+        "Use it: always",
+    ]) {
+        assert.notEqual(strictYamlProblem(bad), "", JSON.stringify(bad));
+    }
+    for (const good of [
+        '"[target] [--save [path]]"',
+        '["**/*.md", "**/docs/**"]',
+        '<symbol1> [symbol2...] or "description of what you want to change" [--save [path]]',
+        "true",
+        ">",
+    ]) {
+        assert.equal(strictYamlProblem(good), "", JSON.stringify(good));
+    }
+});
+test("every frontmatter value is one strict YAML accepts", () => {
+    // Cursor reads `disable-model-invocation`, `alwaysApply` and the
+    // descriptions from these blocks; one bad value elsewhere in a block would
+    // hide them all from a strict parser.
+    const files = [
+        ...readdirSync(join(PLUGIN_ROOT, "skills")).map((s) => `skills/${s}/SKILL.md`),
+        ...readdirSync(join(PLUGIN_ROOT, "rules")).filter((f) => f.endsWith(".mdc")).map((f) => `rules/${f}`),
+        ...readdirSync(join(PLUGIN_ROOT, "agents")).filter((f) => f.endsWith(".md")).map((f) => `agents/${f}`),
+    ];
+    const problems = [];
+    for (const file of files) {
+        const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(readFileSync(join(PLUGIN_ROOT, file), "utf8"));
+        assert.ok(match, `${file} has no YAML frontmatter`);
+        for (const line of match[1].split(/\r?\n/)) {
+            const kv = /^([A-Za-z_][\w-]*):(?:\s+(.*))?$/.exec(line);
+            if (!kv)
+                continue;
+            const problem = strictYamlProblem(kv[2] ?? "");
+            if (problem)
+                problems.push(`${file}: ${kv[1]}: ${problem}`);
+        }
+    }
+    assert.deepEqual(problems, []);
+});
 test("every agent is one a skill delegates to", () => {
     // An agent no skill hands work to only adds its description to every session.
     const skillsDir = join(PLUGIN_ROOT, "skills");
