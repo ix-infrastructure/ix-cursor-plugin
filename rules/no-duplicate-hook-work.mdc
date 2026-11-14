@@ -1,6 +1,6 @@
 ---
-description: Anti-duplication rules for ix-memory hooks. Apply to avoid re-running work that hooks have already done in the current turn.
-alwaysApply: true
+description: Before calling an ix_* tool, reuse Ix context a hook already added this turn (a block starting `[ix` - briefing, edit warning or search result) instead of re-running that lookup.
+alwaysApply: false
 ---
 
 ## No Duplicate Hook Work

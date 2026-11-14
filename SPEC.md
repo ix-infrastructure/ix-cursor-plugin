@@ -158,7 +158,6 @@ ix-cursor-plugin/
 │   ├── ix-architecture/
 │   └── ix-docs/
 ├── agents/
-│   ├── ix-explorer.md
 │   ├── ix-system-explorer.md
 │   ├── ix-bug-investigator.md
 │   ├── ix-safe-refactor-planner.md
@@ -249,6 +248,8 @@ Until #24 the plugin shipped its own server (`mcp/server.ts`, `mcp/tools/`) that
 
 Rules are the Cursor-native home for the shared cognitive model now stored in `ix-claude-plugin/skills/shared.md`.
 
+No rule is always applied (`alwaysApply: false`): Cursor lists each rule's description and the agent reads the rule when it applies, and `docs-mode.mdc` also attaches to docs files through its globs. `mcp/tests/unit/always-on-size.test.ts` enforces this.
+
 ### `graph-first.mdc`
 
 - Orient before diving
@@ -287,6 +288,8 @@ Rules are the Cursor-native home for the shared cognitive model now stored in `i
 ## 4. Skills
 
 The eight Claude skills map almost directly into Cursor skills.
+
+Every skill sets `disable-model-invocation: true`, so it runs only as a slash command. Cursor's skill documentation says such a skill's description is then not offered to the model in every session; that has not been checked in a running Cursor, so the README gives the always-on size both ways.
 
 | Claude skill | Cursor skill | Notes |
 |---|---|---|
@@ -330,11 +333,10 @@ Expected flow:
 
 ## 5. Subagents
 
-The existing Claude agents should port directly into Cursor subagents.
+The existing Claude agents should port directly into Cursor subagents. Only the agents a skill delegates to ship: Cursor lists every subagent's description in every session.
 
 ### Subagent inventory
 
-- `ix-explorer`
 - `ix-system-explorer`
 - `ix-bug-investigator`
 - `ix-safe-refactor-planner`
@@ -636,7 +638,7 @@ Goal: restore the higher-level product experience.
 Deliverables:
 
 - All 8 skills
-- All 5 subagents
+- All 4 subagents
 - Read and trace budgets enforced in prompts and rules
 - Structured outputs
 
@@ -689,7 +691,7 @@ V1 is acceptable when all of the following are true:
 - Cursor can install and load the plugin successfully in IDE mode
 - The MCP server exposes a stable typed tool surface over the existing `ix` CLI
 - The rules reproduce the existing graph-first cognitive model
-- The eight skills and five subagents are available and usable
+- The eight skills and four subagents are available and usable
 - Pre-edit warnings and post-edit ingest work reliably
 - Prompt briefing is cached and silent on failure
 - Search interception defaults to safe augment behavior unless confidence is high
@@ -714,7 +716,7 @@ V1 is acceptable when all of the following are true:
 2. Build a thin MCP wrapper over the CLI.
 3. Port `skills/shared.md` into Cursor rules.
 4. Port the eight skills with minimal semantic changes.
-5. Port the five agents into subagents.
+5. Port the four agents that skills delegate to into subagents.
 6. Add briefing and pre-edit hooks first.
 7. Add post-edit ingest next.
 8. Add search interception only after measuring false positives.

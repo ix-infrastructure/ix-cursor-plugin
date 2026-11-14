@@ -1,6 +1,7 @@
 ---
 name: ix-investigate
 description: Deep dive into a symbol, feature, or bug. Graph-first, minimal code reads, early stopping when sufficient evidence found.
+disable-model-invocation: true
 argument-hint: <symbol, function name, or "how does X work?"> [--save [path]]
 ---
 

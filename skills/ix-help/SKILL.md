@@ -1,6 +1,7 @@
 ---
 name: ix-help
 description: Route to the right Ix skill or command for your task
+disable-model-invocation: true
 argument-hint: <task or question>
 ---
 

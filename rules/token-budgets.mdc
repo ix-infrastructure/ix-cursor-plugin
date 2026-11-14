@@ -1,6 +1,6 @@
 ---
 description: Token budget caps for ix-memory tools. Apply whenever calling Ix MCP tools to keep output within context limits.
-alwaysApply: true
+alwaysApply: false
 ---
 
 ## Token Budget Caps

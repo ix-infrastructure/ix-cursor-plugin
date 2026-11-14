@@ -1,6 +1,6 @@
 ---
 description: Risk-aware editing rules for ix-memory. Apply before any meaningful code edit to avoid unintended blast radius.
-alwaysApply: true
+alwaysApply: false
 ---
 
 ## Risk-Aware Editing
