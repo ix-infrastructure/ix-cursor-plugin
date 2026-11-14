@@ -44,9 +44,9 @@ Some of what the plugin ships reaches the model in every session, before you typ
 - **MCP tools**: the `tools/list` answer from `ix mcp --tools=all` (see `mcp.json`), with a schema for every tool.
 - **Session briefing**: the `sessionStart` hook (`prompt-briefing`) adds the Ix Pro briefing as `additional_context` when Ix Pro is installed, the repo has active goals, plans or recent decisions, and `IX_HOOK_VERBOSITY` is not `silent`. Its size depends on that Pro content (`verbose` adds the full JSON), so the measurement below does not include it.
 
-Measured from this checkout, the rule descriptions plus subagent names and descriptions come to 1,312 bytes of always-on text, against a 2,048-byte limit. `mcp/tests/unit/always-on-size.test.ts` measures it in `npm test` and fails CI above the limit. Before this change the four always-applied rules alone were over 8 KB.
+Measured from this checkout, the rule descriptions plus subagent names and descriptions come to 1,389 bytes of always-on text, against a 2,048-byte limit. `mcp/tests/unit/always-on-size.test.ts` measures it in `npm test` and fails CI above the limit. Before this change the four always-applied rules alone were over 8 KB.
 
-That figure, and the limit, assume Cursor keeps slash-command-only skills out of the session as documented. If a Cursor build lists them anyway, their names and descriptions are added too, for 2,452 bytes in all, over the limit. The test prints both figures.
+That figure, and the limit, assume Cursor keeps slash-command-only skills out of the session as documented. If a Cursor build lists them anyway, their names and descriptions are added too, for 2,529 bytes in all, over the limit. The test prints both figures.
 
 The tool listing comes from the Ix CLI, not from this repo. The `real ix` CI job (`mcp/tests/real-ix/catalog.real-ix.ts`) starts the server the way `mcp.json` does, prints the listing's size, and fails if a skill, agent or rule names a tool the catalog does not have.
 

@@ -161,4 +161,16 @@ test("the hook-deduplication rule's description carries the instruction", () => 
     assert.match(description, /\breuse\b/i, "tell the model to reuse hook context");
     assert.match(description, /instead of re-running/i, "tell the model not to repeat the lookup");
 });
+test("the graph-first rule's description carries the instruction", () => {
+    // No rule is always applied, so in a session where the model never reads
+    // graph-first this description is the only standing cue to prefer Ix tools.
+    // It has to say what to do, not just that the rule exists.
+    const { fields } = parse(join(PLUGIN_ROOT, "rules", "graph-first.mdc"));
+    const description = fields["description"] ?? "";
+    for (const tool of ["ix_locate", "ix_explain", "ix_callers", "ix_impact"]) {
+        assert.match(description, new RegExp(`\\b${tool}\\b`), `name ${tool}`);
+    }
+    assert.match(description, /before grep/i, "say Ix tools come before grep");
+    assert.doesNotMatch(description, /: | #/, "keep the description valid plain YAML");
+});
 //# sourceMappingURL=always-on-size.test.js.map
