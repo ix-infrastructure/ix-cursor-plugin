@@ -47,4 +47,3 @@ async function main() {
 main().catch(() => {
     process.exit(0);
 });
-//# sourceMappingURL=post-edit-ingest.js.map

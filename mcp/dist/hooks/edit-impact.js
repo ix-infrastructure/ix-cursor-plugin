@@ -111,4 +111,3 @@ async function main() {
 main().catch(() => {
     process.exit(0);
 });
-//# sourceMappingURL=edit-impact.js.map

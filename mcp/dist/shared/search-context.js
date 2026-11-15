@@ -50,4 +50,3 @@ export async function searchContext(pattern, root) {
         : null;
     return { text: summarizeDefinition(pattern, definition, callers), raw: { locate, callers } };
 }
-//# sourceMappingURL=search-context.js.map

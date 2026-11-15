@@ -144,4 +144,3 @@ export function rootContaining(filePath, dirs) {
         return rel !== "" && rel.split(sep)[0] !== ".." && !isAbsolute(rel);
     });
 }
-//# sourceMappingURL=auto-map.js.map

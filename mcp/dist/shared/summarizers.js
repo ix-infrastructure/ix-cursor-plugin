@@ -79,4 +79,3 @@ export function summarizeDefinition(pattern, definition, callers) {
     const callerText = callerList(callers);
     return callerText ? `${head}; ${callerText}` : head;
 }
-//# sourceMappingURL=summarizers.js.map

@@ -59,4 +59,3 @@ export async function ixRoot(input, filePath) {
         return null;
     return (await gitRoot(dir)) ?? dir;
 }
-//# sourceMappingURL=hook-io.js.map

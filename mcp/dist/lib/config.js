@@ -55,4 +55,3 @@ export function timeoutFor(subcommand) {
         return TIMEOUT_MAP_MS;
     return TIMEOUT_DEFAULT_MS;
 }
-//# sourceMappingURL=config.js.map
