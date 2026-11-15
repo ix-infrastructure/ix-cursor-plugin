@@ -1,28 +1,7 @@
 // Copyright 2026 Ix Infrastructure Inc.
 
-import { appendFile, mkdir } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
-
-import { redactSecrets } from "../shared/secrets.js";
-
-export const ERROR_LOG_PATH = join(
-  homedir(),
-  ".local",
-  "share",
-  "ix",
-  "cursor-plugin",
-  "errors",
-  "errors.jsonl",
-);
-
-export type ErrorCode =
-  | "IX_NOT_FOUND"
-  | "TIMEOUT"
-  | "PARSE_FAILURE"
-  | "VALIDATION"
-  | "PERMISSION_DENIED"
-  | "UNKNOWN";
+// The only error lib/cli.ts raises itself: IX_BIN names a binary other than ix.
+export type ErrorCode = "PERMISSION_DENIED";
 
 export class IxError extends Error {
   constructor(
@@ -33,42 +12,4 @@ export class IxError extends Error {
     super(message);
     this.name = "IxError";
   }
-}
-
-function redact(text: string): string {
-  const home = process.env["HOME"] ?? "__NO_HOME__";
-  return redactSecrets(text).replaceAll(new RegExp(home, "g"), "~");
-}
-
-async function appendErrorLog(line: string): Promise<void> {
-  try {
-    await mkdir(dirname(ERROR_LOG_PATH), { recursive: true });
-    await appendFile(ERROR_LOG_PATH, line + "\n", "utf8");
-  } catch {
-    // non-fatal
-  }
-}
-
-// ── Error capture (fire-and-forget) ──────────────────────────────────────────
-// Appends a JSONL entry to errors.jsonl. Never throws; never blocks the caller.
-
-export function captureError(
-  err: IxError,
-  context: string,
-): void {
-  void (async () => {
-    try {
-      const ts = new Date().toISOString();
-      const entry = JSON.stringify({
-        ts,
-        code: err.code,
-        message: redact(err.message.slice(0, 300)),
-        context: redact(context.slice(0, 200)),
-        cause: redact(String(err.cause ?? "").slice(0, 300)),
-      });
-      await appendErrorLog(entry);
-    } catch {
-      // truly fire-and-forget
-    }
-  })();
 }

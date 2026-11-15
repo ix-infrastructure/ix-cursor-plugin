@@ -1,0 +1,9 @@
+{
+  "resolvedTarget": { "id": "e1", "kind": "class", "name": "SessionManager", "path": "src/session/manager.ts" },
+  "results": [
+    { "id": "e7", "name": "createSession", "kind": "function", "path": "src/session/index.ts" },
+    { "id": "e8", "name": "open", "kind": "method", "path": "src/store/session-store.ts" }
+  ],
+  "summary": { "total": 2, "resolved": 2, "unresolved": 0 },
+  "diagnostics": []
+}

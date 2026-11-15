@@ -9,7 +9,7 @@
     "test:unit": "tsx --test tests/unit/**/*.test.ts",
     "test:real-ix": "tsx --test tests/real-ix/*.real-ix.ts",
     "test:windows": "tsx --test tests/unit/launch.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && node scripts/check-dead-exports.mjs"
   },
   "dependencies": {},
   "devDependencies": {

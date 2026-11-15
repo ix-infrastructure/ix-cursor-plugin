@@ -174,6 +174,7 @@ ix-cursor-plugin/
     ├── cognitive-model.md
     ├── hook-io.ts
     ├── intent-classifier.ts
+    ├── search-context.ts
     └── summarizers.ts
 ```
 

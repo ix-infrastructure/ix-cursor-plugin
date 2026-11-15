@@ -49,8 +49,8 @@ async function isFile(path) {
     }
 }
 // PATH search hits, per process. Keyed on everything the search reads, so a
-// changed PATH is searched again. A miss is not cached (ix installed while the
-// MCP server runs must still be found), nor is an explicit path (one stat).
+// changed PATH is searched again. A miss is not cached (ix installed later in
+// the same process must still be found), nor is an explicit path (one stat).
 const lookupCache = new Map();
 /**
  * The file a shell would run for `bin`, or null. A name containing a path

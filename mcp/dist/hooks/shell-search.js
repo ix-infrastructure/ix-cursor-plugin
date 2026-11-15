@@ -2,9 +2,10 @@
 // Copyright 2026 Ix Infrastructure Inc.
 // Cursor postToolUse hook (matcher: "Shell") — graph context for shell grep/rg.
 //
-// After a shell command runs, detects grep or rg invocations, extracts the
-// search pattern, and runs the same ix text + ix locate flow as the Grep hook,
-// returning the summary as `additional_context`.
+// Opt-in: IX_HOOK_SHELL_SEARCH=true. After a shell command runs, detects grep
+// or rg invocations, extracts the search pattern, and runs the same lookup as
+// the Grep hook (shared/search-context.ts): where the symbol is defined and who
+// calls it, or nothing when ix locate has no single confident definition.
 //
 // Was a beforeShellExecution hook answering `permission: "allow"` +
 // `agent_message`: a permission decision (merged across hook sources, "deny
@@ -20,14 +21,13 @@
 //   exit 0 + {"additional_context": ...} → context shown to the agent
 //   exit 0 + no stdout                   → nothing to say
 //   never blocks: postToolUse has no permission output
-import { checkHealth, runIxParallel } from "../lib/cli.js";
-import { IX_HOOK_VERBOSITY } from "../lib/config.js";
-import { classifyIntent, looksLikeSecret } from "../shared/intent-classifier.js";
-import { parseIxJson } from "../lib/parser.js";
+import { checkHealth } from "../lib/cli.js";
+import { IX_HOOK_SHELL_SEARCH, IX_HOOK_VERBOSITY } from "../lib/config.js";
 import { ixRoot, readHookInput, writeHookOutput, } from "../shared/hook-io.js";
+import { isSymbolSearch, searchContext } from "../shared/search-context.js";
 // ── Pattern extraction ────────────────────────────────────────────────────────
-// Port of the shell pipeline in ix-bash.sh: intercept `grep` / `rg` in common
-// forms including `cd src && rg Foo`, `find . | xargs grep Foo`, etc.
+// Intercepts `grep` / `rg` in common forms, including `cd src && rg Foo` and
+// `find . | xargs grep Foo`.
 const GREP_CMD_RE = /(?:^|[\s;|&(])(grep|rg)\s+([\s\S]+)/;
 function extractGrepPattern(command) {
     const match = GREP_CMD_RE.exec(command);
@@ -47,49 +47,19 @@ function extractGrepPattern(command) {
     const plain = /^([^\s]+)/.exec(withoutFlags);
     return plain?.[1] ?? null;
 }
-function summarizeLocate(raw) {
-    const confidence = raw.confidence ?? raw.resolvedTarget?.confidence ?? 1.0;
-    const target = raw.resolvedTarget;
-    if (target?.name) {
-        const kind = target.kind ? `, ${target.kind}` : "";
-        const file = target.path ? `, ${target.path.split("/").at(-1)}` : "";
-        return { part: `symbol: ${target.name}${kind}${file}`, confidence };
-    }
-    const candidates = (raw.candidates ?? []).slice(0, 3);
-    if (candidates.length > 0) {
-        const list = candidates.map((c) => `${c.name ?? "?"}${c.kind ? ` (${c.kind})` : ""}`).join(", ");
-        return { part: `candidates: ${list}`, confidence };
-    }
-    return { part: "", confidence };
-}
-function summarizeText(hits) {
-    if (hits.length === 0)
-        return "";
-    const files = [...new Set(hits.map((h) => h.path?.split("/").at(-1) ?? "").filter(Boolean))];
-    const shown = files.slice(0, 4).join(", ");
-    const more = files.length > 4 ? ` (+${files.length - 4} more)` : "";
-    return `${hits.length} text hits in ${shown}${more}`;
-}
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
     const input = await readHookInput();
     if (!input)
         process.exit(0);
-    if (IX_HOOK_VERBOSITY === "silent")
+    if (!IX_HOOK_SHELL_SEARCH || IX_HOOK_VERBOSITY === "silent")
         process.exit(0);
     const command = input.tool_input?.command ?? "";
     if (!command)
         process.exit(0);
-    // Only intercept grep/rg
+    // Only grep/rg, and only a symbol-like pattern
     const pattern = extractGrepPattern(command);
-    if (!pattern || pattern.length < 3)
-        process.exit(0);
-    // Skip secrets
-    if (looksLikeSecret(pattern))
-        process.exit(0);
-    // Classify intent — only pursue symbol-like patterns
-    const { intent } = classifyIntent(pattern);
-    if (intent === "literal" || intent === "file" || intent === "unknown")
+    if (!pattern || !isSymbolSearch(pattern))
         process.exit(0);
     // Run ix in the repo the command ran in.
     const workingDir = input.tool_input?.working_directory;
@@ -103,47 +73,12 @@ async function main() {
     const healthy = await checkHealth();
     if (!healthy)
         process.exit(0);
-    // Parallel ix calls (same flow as pre-search, no path/lang args from bash context)
-    const isRegex = /[*+?]|[[\]()]|\\[a-zA-Z]|\{[0-9]/.test(pattern);
-    const calls = [{ args: ["text", pattern, "--limit", "15"], label: "text" }];
-    if (!isRegex) {
-        calls.push({ args: ["locate", pattern], label: "locate" });
-    }
-    const results = await runIxParallel(calls, { timeout: 9_000, cwd: root });
-    let locatePart = "";
-    let locateRaw = null;
-    const locateResult = results["locate"];
-    if (locateResult?.stdout) {
-        try {
-            locateRaw = parseIxJson(locateResult.stdout);
-            const s = summarizeLocate(locateRaw);
-            if (s.confidence >= 0.3)
-                locatePart = s.part;
-        }
-        catch { /* ignore */ }
-    }
-    let textPart = "";
-    let textRaw = null;
-    const textResult = results["text"];
-    if (textResult?.stdout) {
-        try {
-            textRaw = parseIxJson(textResult.stdout);
-            textPart = summarizeText(Array.isArray(textRaw) ? textRaw : []);
-        }
-        catch { /* ignore */ }
-    }
-    if (!locatePart && !textPart)
+    const found = await searchContext(pattern, root);
+    if (!found)
         process.exit(0);
-    const parts = [`[ix] bash grep intercepted for '${pattern}'`];
-    if (locatePart)
-        parts.push(locatePart);
-    if (textPart)
-        parts.push(textPart);
-    parts.push(`Prefer: ix_locate / ix_text over shell grep`);
-    const context = parts.join(" — ");
     const additionalContext = IX_HOOK_VERBOSITY === "verbose"
-        ? `${context}\n\n${JSON.stringify({ locate: locateRaw, text: textRaw }, null, 2)}`
-        : context;
+        ? `${found.text}\n\n${JSON.stringify(found.raw, null, 2)}`
+        : found.text;
     const output = { additional_context: additionalContext };
     writeHookOutput(output);
     process.exit(0);

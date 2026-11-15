@@ -1,32 +1,11 @@
 // Copyright 2026 Ix Infrastructure Inc.
 import { stripHeader } from "./cli.js";
 import { containsSecret, redactSecrets } from "../shared/secrets.js";
-export function isTextResult(result) {
-    return result.ok && "format" in result && result.format === "llm";
-}
 export class ParseError extends Error {
     constructor(message) {
         super(message);
         this.name = "ParseError";
     }
-}
-// ── Envelope builders ─────────────────────────────────────────────────────────
-export function wrapOk(tool, input, data, summary, evidence, durationMs) {
-    const result = { ok: true, tool, input, summary, data };
-    if (evidence !== undefined)
-        result.evidence = evidence;
-    if (durationMs !== undefined)
-        result.timing_ms = durationMs;
-    return result;
-}
-export function wrapErr(tool, input, err) {
-    return { ok: false, tool, input, error: { code: err.code, message: err.message } };
-}
-export function wrapText(tool, input, text, durationMs) {
-    const result = { ok: true, tool, input, format: "llm", text };
-    if (durationMs !== undefined)
-        result.timing_ms = durationMs;
-    return result;
 }
 // ── JSON parser ───────────────────────────────────────────────────────────────
 // Strips ix header noise, then parses JSON. Throws ParseError on failure.

@@ -27,12 +27,14 @@ Each hook uses an event whose output Cursor actually reads ([Cursor hooks refere
 |---|---|---|
 | `sessionStart` | `prompt-briefing` | Ix Pro briefing (goals, plans, decisions) as `additional_context` in the new conversation |
 | `postToolUse` `Write` | `edit-impact` | Blast-radius warning after an edit to a file with many dependents |
-| `postToolUse` `Grep` | `pre-search` | Graph view of a symbol-like search (`ix locate` + `ix text`) after the search |
-| `preToolUse` `Grep` | `pre-search` | Nothing, unless `IX_BLOCK_ON_HIGH_CONFIDENCE=true`: then a confident match denies the Grep and returns the graph answer |
-| `postToolUse` `Shell` | `shell-search` | Same graph view for `grep`/`rg` run in the shell |
+| `postToolUse` `Grep` | `pre-search` | Off by default (`IX_HOOK_SEARCH=true` turns it on). After a symbol-like search: where the name is defined and who calls it (`ix locate`, then `ix callers`). Nothing when `ix locate` has no single confident definition |
+| `preToolUse` `Grep` | `pre-search` | Nothing, unless `IX_BLOCK_ON_HIGH_CONFIDENCE=true`: then a confident definition denies the Grep and returns the same line instead |
+| `postToolUse` `Shell` | `shell-search` | Off by default (`IX_HOOK_SHELL_SEARCH=true` turns it on). The same line for `grep`/`rg` run in the shell |
 | `afterFileEdit`, `stop` | `post-edit-ingest`, `debounced-map` | Nothing; they refresh an already-mapped repo's graph in the background |
 
-`IX_HOOK_VERBOSITY=silent` turns off the text-producing hooks. `sessionStart` hooks do not run in Cursor cloud agents.
+Each hook that adds text has its own switch: `IX_HOOK_BRIEFING` and `IX_HOOK_EDIT_IMPACT` (on by default), `IX_HOOK_SEARCH` and `IX_HOOK_SHELL_SEARCH` (off by default). Set one to `false` (or `true`) to change just that hook. `IX_HOOK_VERBOSITY=silent` turns all four off together. `sessionStart` hooks do not run in Cursor cloud agents.
+
+A `hooks.json` entry cannot depend on an environment variable, so `pre-search` stays registered for both Grep events even when it is switched off. Each Grep then starts two short Node processes that exit before running `ix`.
 
 ## Prerequisites
 
@@ -65,7 +67,12 @@ Windows PowerShell:
 powershell -ExecutionPolicy Bypass -NoProfile -Command "iwr https://raw.githubusercontent.com/ix-infrastructure/ix-cursor-plugin/main/install.ps1 -UseBasicParsing | iex"
 ```
 
-This downloads the repo archive, installs the plugin into `~/.cursor/plugins/local/ix-memory`, and installs/builds MCP dependencies if needed.
+This downloads the repo archive and installs the plugin into `~/.cursor/plugins/local/ix-memory`. The archive ships the built hooks (`mcp/dist`), which run on Node alone; npm is used only to build them if `mcp/dist` is missing. When it finishes, the installer prints the version it installed and the ref it came from.
+
+By default it installs the current tip of the `main` branch. To install something else, set one of these before running the installer (for example `curl -fsSL .../install.sh | IX_CURSOR_VERSION=1.2.3 bash`, or `$env:IX_CURSOR_VERSION = "1.2.3"` in PowerShell):
+
+- `IX_CURSOR_VERSION=1.2.3` installs the release tag `v1.2.3`.
+- `IX_CURSOR_REF=<ref>` installs a branch name, a full ref such as `refs/tags/<tag>`, or a full 40-character commit sha.
 
 To uninstall:
 

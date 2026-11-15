@@ -21,7 +21,7 @@
 //   never exit non-zero
 
 import { checkHealth, runIx } from "../lib/cli.js";
-import { IX_HOOK_VERBOSITY } from "../lib/config.js";
+import { IX_HOOK_BRIEFING, IX_HOOK_VERBOSITY } from "../lib/config.js";
 import { parseIxJson } from "../lib/parser.js";
 import { gitRoot, projectDirs } from "../shared/auto-map.js";
 import { withCache } from "../shared/cache.js";
@@ -124,7 +124,7 @@ async function main(): Promise<void> {
   const input = await readHookInput<CommonHookInput>();
   const workspaceRoots: unknown = input?.workspace_roots;
 
-  if (IX_HOOK_VERBOSITY === "silent") {
+  if (!IX_HOOK_BRIEFING || IX_HOOK_VERBOSITY === "silent") {
     process.exit(0);
   }
 

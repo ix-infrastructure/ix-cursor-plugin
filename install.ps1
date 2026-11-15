@@ -3,11 +3,40 @@
 $ErrorActionPreference = "Stop"
 
 $Repo = if ($env:IX_CURSOR_REPO) { $env:IX_CURSOR_REPO } else { "ix-infrastructure/ix-cursor-plugin" }
-$Ref = if ($env:IX_CURSOR_REF) { $env:IX_CURSOR_REF } else { "main" }
 $PluginName = if ($env:IX_CURSOR_PLUGIN_NAME) { $env:IX_CURSOR_PLUGIN_NAME } else { "ix-memory" }
 $CursorLocalRoot = Join-Path $env:USERPROFILE ".cursor\plugins\local"
 $DestDir = Join-Path $CursorLocalRoot $PluginName
-$ArchiveUrl = "https://github.com/$Repo/archive/refs/heads/$Ref.zip"
+
+# What to install (same rules as install.sh):
+#   IX_CURSOR_VERSION=1.2.3   the release tag v1.2.3 (a leading "v" is accepted)
+#   IX_CURSOR_REF=<ref>       a branch name, a full ref (refs/tags/..., refs/heads/...)
+#                             or a full 40-character commit sha
+# With neither set, the tip of the main branch, as before.
+$Version = if ($env:IX_CURSOR_VERSION) { $env:IX_CURSOR_VERSION } else { "" }
+$Ref = if ($env:IX_CURSOR_REF) { $env:IX_CURSOR_REF } else { "" }
+
+if ($Version -and $Ref) {
+  throw "Set IX_CURSOR_VERSION or IX_CURSOR_REF, not both."
+}
+
+if ($Version) {
+  $Version = $Version -creplace '^v', ''
+  if ($Version -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$') {
+    throw "IX_CURSOR_VERSION must be a version such as 1.2.3, got '$($env:IX_CURSOR_VERSION)'."
+  }
+  $Ref = "refs/tags/v$Version"
+} elseif (-not $Ref) {
+  $Ref = "main"
+}
+
+# A bare name is a branch, as IX_CURSOR_REF always meant; a full ref or a full
+# sha is passed through.
+if ($Ref.StartsWith("refs/") -or $Ref -cmatch '^[0-9a-f]{40}$') {
+  $ArchiveRef = $Ref
+} else {
+  $ArchiveRef = "refs/heads/$Ref"
+}
+$ArchiveUrl = "https://github.com/$Repo/archive/$ArchiveRef.zip"
 
 function Require-Command {
   param([string]$Name)
@@ -95,7 +124,12 @@ try {
 
   $ArchivePath = Join-Path $TempDir "plugin.zip"
   Write-Host "Downloading archive..."
-  Invoke-WebRequest -Uri $ArchiveUrl -OutFile $ArchivePath
+  try {
+    Invoke-WebRequest -Uri $ArchiveUrl -OutFile $ArchivePath
+  } catch {
+    throw ("Could not download $ArchiveUrl ($($_.Exception.Message)). " +
+      "Check that $Ref exists in $Repo (IX_CURSOR_VERSION / IX_CURSOR_REF).")
+  }
 
   $ExtractDir = Join-Path $TempDir "extract"
   Expand-Archive -Path $ArchivePath -DestinationPath $ExtractDir -Force
@@ -108,6 +142,22 @@ try {
   $ManifestPath = Join-Path $ExtractedRoot.FullName ".cursor-plugin\plugin.json"
   if (-not (Test-Path $ManifestPath)) {
     throw "Extracted archive does not contain .cursor-plugin\plugin.json. Check IX_CURSOR_REPO and IX_CURSOR_REF."
+  }
+
+  # The version the manifest declares is what this install reports. CI keeps it
+  # equal to mcp/package.json.
+  $InstalledVersion = $null
+  try {
+    $InstalledVersion = (Get-Content -Raw -Path $ManifestPath | ConvertFrom-Json).version
+  } catch {
+    $InstalledVersion = $null
+  }
+  if (-not ($InstalledVersion -is [string]) -or -not $InstalledVersion) {
+    $InstalledVersion = "unknown"
+  }
+
+  if ($Version -and $InstalledVersion -ne $Version) {
+    Write-Warning "Asked for $Version, but $Ref declares version $InstalledVersion in .cursor-plugin\plugin.json."
   }
 
   if (Test-Path $DestDir) {
@@ -156,22 +206,9 @@ try {
     }
   }
 
-  $NodeModulesDir = Join-Path $DestDir "mcp\node_modules"
+  # The committed mcp/dist runs on Node alone (the package has no runtime
+  # dependencies), so npm is needed only to build it when it is absent.
   $DistHooks = Join-Path $DestDir "mcp\dist\hooks\prompt-briefing.js"
-
-  if (-not (Test-Path $NodeModulesDir)) {
-    Require-Command "npm"
-    Write-Host "Installing hook build dependencies..."
-    Push-Location (Join-Path $DestDir "mcp")
-    try {
-      & npm ci --omit=dev
-      if ($LASTEXITCODE -ne 0) {
-        throw "npm ci --omit=dev failed."
-      }
-    } finally {
-      Pop-Location
-    }
-  }
 
   if (-not (Test-Path $DistHooks)) {
     Require-Command "npm"
@@ -193,7 +230,12 @@ try {
 
   Write-Host ""
   Write-Host "Installed Cursor plugin:"
+  Write-Host "  $PluginName $InstalledVersion from $Repo@$Ref"
   Write-Host "  $DestDir"
+  if ($ArchiveRef.StartsWith("refs/heads/")) {
+    Write-Host "  ($Ref is a branch: this is its current tip, not a pinned release."
+    Write-Host "   Set IX_CURSOR_VERSION to install a tagged release.)"
+  }
   Write-Host ""
   Write-Host "Next step:"
   Write-Host "  Restart Cursor or reload plugins so it picks up the new install."
