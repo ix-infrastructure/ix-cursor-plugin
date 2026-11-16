@@ -232,7 +232,13 @@ test("childEnv: nothing for a plain launch, the base plus extraEnv otherwise, ca
   const cmd = batchLaunch("C:\\ix.cmd", [], { platform: "win32", env: {} });
   const fromProcess = childEnv(cmd);
   assert.equal(fromProcess?.["NoDefaultCurrentDirectoryInExePath"], "1");
-  assert.equal(fromProcess?.["PATH"], process.env["PATH"]);
+  // Every inherited variable is copied under its own name. Compare by the real
+  // key: on Windows process.env answers "PATH" for a variable stored as "Path",
+  // but a plain copy does not.
+  for (const key of Object.keys(process.env)) {
+    if (key.toUpperCase() === "NODEFAULTCURRENTDIRECTORYINEXEPATH") continue;
+    assert.equal(fromProcess?.[key], process.env[key], key);
+  }
 
   const input = { Path: "p", NODEFAULTCURRENTDIRECTORYINEXEPATH: "0" };
   assert.deepEqual(childEnv(cmd, input), { Path: "p", NoDefaultCurrentDirectoryInExePath: "1" });
