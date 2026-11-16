@@ -5,7 +5,7 @@ import { appendFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { IX_BIN, IX_DEBUG_LOG, timeoutFor } from "./config.js";
 import { IxError } from "./errors.js";
-import { findExecutable, ixLaunch } from "./launch.js";
+import { childEnv, findExecutable, ixLaunch } from "./launch.js";
 import { withCache } from "../shared/cache.js";
 const execFileAsync = promisify(execFile);
 // ── Debug log ─────────────────────────────────────────────────────────────────
@@ -68,9 +68,11 @@ export async function runIx(args, opts = {}) {
     await debugLog(`CMD ${IX_BIN} ${fullArgs.join(" ")}`);
     try {
         const launch = await ixLaunch(IX_BIN, fullArgs);
+        const env = childEnv(launch);
         const { stdout, stderr } = await execFileAsync(launch.file, launch.args, {
             timeout,
             ...(opts.cwd ? { cwd: opts.cwd } : {}),
+            ...(env ? { env } : {}),
             maxBuffer: 10 * 1024 * 1024,
             windowsHide: true,
             windowsVerbatimArguments: launch.windowsVerbatimArguments,

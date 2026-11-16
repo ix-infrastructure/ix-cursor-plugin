@@ -14,7 +14,10 @@
 //   - the installer layout above starts node with the CLI script and the
 //     arguments as an argv array, with no shell at all (installerLaunch);
 //   - any other .cmd/.bat starts through cmd.exe with every argument quoted so
-//     that it stays data however many batch files pass it on (quoteCmdArg).
+//     that it stays data however many batch files pass it on (quoteCmdArg),
+//     and with NoDefaultCurrentDirectoryInExePath set, so a bare `node` (or any
+//     other bare name) in the batch file is looked up on PATH only, never in
+//     the working directory, which is the user's workspace (childEnv).
 //
 // Arguments include search patterns and paths from the agent's tool calls,
 // so none is ever pasted into a command line raw.
@@ -35,6 +38,8 @@ export interface IxLaunch {
   args: string[];
   /** True only for the cmd.exe wrapper, whose line is already quoted. */
   windowsVerbatimArguments: boolean;
+  /** Variables the child needs on top of its environment; set only on the cmd.exe route. */
+  extraEnv?: Record<string, string>;
 }
 
 const DEFAULT_PATHEXT = ".COM;.EXE;.BAT;.CMD";
@@ -238,7 +243,27 @@ export function batchLaunch(script: string, args: string[], opts: LaunchEnv = {}
     file: envVar(env, "COMSPEC", win) || "cmd.exe",
     args: ["/e:on", "/d", "/v:off", "/s", "/c", `"${line}"`],
     windowsVerbatimArguments: true,
+    extraEnv: { NoDefaultCurrentDirectoryInExePath: "1" },
   };
+}
+
+/**
+ * The environment to start `launch` with: undefined (inherit, as before) when
+ * it needs nothing extra and no `base` is given, else a new object of `base`
+ * (default process.env) plus `launch.extraEnv`. A key that differs from an
+ * added one only in case is dropped first, since Windows names are
+ * case-insensitive and a copied env object is not.
+ */
+export function childEnv(launch: IxLaunch, base?: NodeJS.ProcessEnv): NodeJS.ProcessEnv | undefined {
+  const extra = launch.extraEnv ?? {};
+  if (Object.keys(extra).length === 0 && base === undefined) return undefined;
+  const env: NodeJS.ProcessEnv = { ...(base ?? process.env) };
+  for (const name of Object.keys(extra)) {
+    for (const key of Object.keys(env)) {
+      if (key !== name && key.toUpperCase() === name.toUpperCase()) delete env[key];
+    }
+  }
+  return Object.assign(env, extra);
 }
 
 // The installer layout found per launcher (and PATH, which picks node), per process.
