@@ -22,7 +22,7 @@ import { isAbsolute, join, relative, sep } from "node:path";
 import { promisify } from "node:util";
 import { IX_BIN } from "../lib/config.js";
 import { stripHeader } from "../lib/cli.js";
-import { ixLaunch } from "../lib/launch.js";
+import { childEnv, ixLaunch } from "../lib/launch.js";
 import { ensureStateDir, rootKey } from "./state-dir.js";
 const execFileAsync = promisify(execFile);
 export const AUTO_MAP_DEBOUNCE_MS = 300_000; // 5 minutes per root
@@ -53,8 +53,10 @@ export async function gitRoot(dir) {
 export async function isMapped(root, ixBin) {
     try {
         const launch = await ixLaunch(ixBin, ["status", "--format", "json", "--root", root]);
+        const env = childEnv(launch);
         const { stdout } = await execFileAsync(launch.file, launch.args, {
             cwd: root,
+            ...(env ? { env } : {}),
             timeout: STATUS_TIMEOUT_MS,
             maxBuffer: 1024 * 1024,
             windowsHide: true,
@@ -109,7 +111,7 @@ export async function requestAutoMap(projectDir, opts = {}) {
         const launch = await ixLaunch(ixBin, ["map", root, "--silent"]);
         const child = spawn(launch.file, launch.args, {
             cwd: root,
-            env: { ...process.env, IX_AUTO_MAP: "1" },
+            env: childEnv(launch, { ...process.env, IX_AUTO_MAP: "1" }),
             detached: true,
             stdio: "ignore",
             // detached on Windows would otherwise open a console window.
