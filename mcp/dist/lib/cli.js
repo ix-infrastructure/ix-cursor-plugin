@@ -5,7 +5,7 @@ import { appendFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { IX_BIN, IX_DEBUG_LOG, timeoutFor } from "./config.js";
 import { IxError } from "./errors.js";
-import { findExecutable, ixLaunch } from "./launch.js";
+import { childEnv, findExecutable, ixLaunch } from "./launch.js";
 import { withCache } from "../shared/cache.js";
 const execFileAsync = promisify(execFile);
 // ── Debug log ─────────────────────────────────────────────────────────────────
@@ -68,9 +68,11 @@ export async function runIx(args, opts = {}) {
     await debugLog(`CMD ${IX_BIN} ${fullArgs.join(" ")}`);
     try {
         const launch = await ixLaunch(IX_BIN, fullArgs);
+        const env = childEnv(launch);
         const { stdout, stderr } = await execFileAsync(launch.file, launch.args, {
             timeout,
             ...(opts.cwd ? { cwd: opts.cwd } : {}),
+            ...(env ? { env } : {}),
             maxBuffer: 10 * 1024 * 1024,
             windowsHide: true,
             windowsVerbatimArguments: launch.windowsVerbatimArguments,
@@ -97,28 +99,6 @@ export async function runIx(args, opts = {}) {
         return { ok: false, stdout: "", stderr: String(err), durationMs };
     }
 }
-// ── Parallel invocation ───────────────────────────────────────────────────────
-export async function runIxParallel(calls, opts = {}) {
-    const settled = await Promise.allSettled(calls.map((c) => runIx(c.args, opts)));
-    const result = {};
-    for (let i = 0; i < calls.length; i++) {
-        const label = calls[i].label;
-        const outcome = settled[i];
-        if (outcome.status === "fulfilled") {
-            result[label] = outcome.value;
-        }
-        else {
-            result[label] = {
-                ok: false,
-                stdout: "",
-                stderr: String(outcome.reason),
-                durationMs: 0,
-            };
-        }
-    }
-    return result;
-}
 function isExecError(err) {
     return err instanceof Error && ("stdout" in err || "stderr" in err);
 }
-//# sourceMappingURL=cli.js.map

@@ -17,7 +17,7 @@ Hooks fire automatically at tool boundaries and inject Ix context into the conve
 
 ### Search and Locate Deduplication
 
-4. **If a hook already resolved a symbol** (via an `[ix]` context block added after a Grep or shell search), do not call `ix_locate` or `ix_text` for the same query in the same turn. Use the resolved result directly.
+4. **If a hook already resolved a symbol** (an `[ix] '<pattern>': ... defined in ...` line added after a Grep or shell search, with its callers), do not call `ix_locate` or `ix_callers` for the same symbol in the same turn. Use the resolved result directly.
 
 5. **Do not repeat an Ix query that returned a result this turn.** Before calling any Ix tool, check whether the same query was already run and produced output. If it did, use the cached result.
 

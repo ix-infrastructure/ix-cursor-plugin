@@ -9,4 +9,3 @@ export class IxError extends Error {
         this.name = "IxError";
     }
 }
-//# sourceMappingURL=errors.js.map

@@ -131,25 +131,20 @@ case "${SUBCOMMAND}" in
       exit "${IX_MOCK_LOCATE_EXIT:-0}"
     fi
     ;;
-  text)
-    # `ix text <term> [--limit n] [--path dir] [--language l] [--format f]`;
-    # --path is workspace-relative, so an absolute one is a caller bug.
-    shift
+  callers)
+    # `ix callers <symbol> [--format f]`. The search hooks run it only after
+    # `ix locate` resolved one definition.
+    shift || true
     while [ $# -gt 0 ]; do
       case "$1" in
-        --limit|--language|--format) shift ;;
-        --path)
-          shift
-          case "${1:-}" in
-            /*) printf 'error: --path must be workspace-relative: %s\n' "$1" >&2; exit 1 ;;
-          esac
-          ;;
+        --format) shift ;;
         -*) printf "error: unknown option '%s'\n" "$1" >&2; exit 1 ;;
-        *) printf 'error: too many arguments for text\n' >&2; exit 1 ;;
+        *) printf 'error: too many arguments for callers\n' >&2; exit 1 ;;
       esac
       shift
     done
-    cat "${IX_MOCK_TEXT_FILE:-${FIXTURES_DIR}/text_hits.json}"
+    cat "${IX_MOCK_CALLERS_FILE:-${FIXTURES_DIR}/callers.json}"
+    exit "${IX_MOCK_CALLERS_EXIT:-0}"
     ;;
   --version)
     printf '{"ok":true,"version":"%s"}\n' "${IX_MOCK_VERSION:-0.0.0-test}"

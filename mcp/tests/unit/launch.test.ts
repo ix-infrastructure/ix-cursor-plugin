@@ -12,11 +12,11 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chmod, copyFile, link, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 
-import { batchLaunch, findExecutable, installerLaunch, ixLaunch, quoteCmdArg } from "../../lib/launch.js";
+import { batchLaunch, childEnv, findExecutable, installerLaunch, ixLaunch, quoteCmdArg } from "../../lib/launch.js";
 
 const WIN = process.platform === "win32";
 
@@ -207,6 +207,43 @@ test("win32 runs an unknown .cmd through cmd.exe /e:on /d /v:off /s /c with ever
     "/c",
     `""${join(dir, "ix.cmd")}" "text" "a&b""`,
   ]);
+});
+
+test("the cmd.exe route asks cmd not to run programs from the working directory", async () => {
+  const dir = join(ROOT, "launch");
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "ix.cmd"), "");
+  const launch = await ixLaunch("ix", ["x"], { platform: "win32", env: { PATH: dir, PATHEXT: ".CMD" } });
+  assert.equal(launch.windowsVerbatimArguments, true);
+  assert.deepEqual(launch.extraEnv, { NoDefaultCurrentDirectoryInExePath: "1" });
+  assert.deepEqual(batchLaunch("C:\\ix.cmd", [], { platform: "win32", env: {} }).extraEnv, {
+    NoDefaultCurrentDirectoryInExePath: "1",
+  });
+});
+
+test("childEnv: nothing for a plain launch, the base plus extraEnv otherwise, case-insensitively", () => {
+  const plain = { file: "ix", args: [], windowsVerbatimArguments: false };
+  assert.equal(childEnv(plain), undefined);
+  const base = { PATH: "p", IX_AUTO_MAP: "1" };
+  const copy = childEnv(plain, base);
+  assert.deepEqual(copy, base);
+  assert.notEqual(copy, base);
+
+  const cmd = batchLaunch("C:\\ix.cmd", [], { platform: "win32", env: {} });
+  const fromProcess = childEnv(cmd);
+  assert.equal(fromProcess?.["NoDefaultCurrentDirectoryInExePath"], "1");
+  // Every inherited variable is copied under its own name. Compare by the real
+  // key: on Windows process.env answers "PATH" for a variable stored as "Path",
+  // but a plain copy does not.
+  for (const key of Object.keys(process.env)) {
+    if (key.toUpperCase() === "NODEFAULTCURRENTDIRECTORYINEXEPATH") continue;
+    assert.equal(fromProcess?.[key], process.env[key], key);
+  }
+
+  const input = { Path: "p", NODEFAULTCURRENTDIRECTORYINEXEPATH: "0" };
+  assert.deepEqual(childEnv(cmd, input), { Path: "p", NoDefaultCurrentDirectoryInExePath: "1" });
+  // The caller's object is left as it was.
+  assert.deepEqual(input, { Path: "p", NODEFAULTCURRENTDIRECTORYINEXEPATH: "0" });
 });
 
 test("a % in the launcher path is written so the /c line does not expand it", () => {
@@ -412,4 +449,26 @@ test("windows: runIx starts the installer layout with node directly", { skip: !W
   assert.equal(result.ok, true, result.stderr);
   assert.deepEqual(JSON.parse(await readFile(fake.argvFile, "utf8")), ["text", ...DEEP, "--format", "json"]);
   assert.equal(existsSync(MARKER), false);
+});
+
+test("windows: a batch launcher's bare `node` is never taken from the workspace", { skip: !WIN }, async () => {
+  const launcherDir = join(ROOT, "bare-node launcher");
+  const workspace = join(ROOT, "workspace & co");
+  const planted = join(workspace, "planted-ran");
+  await mkdir(launcherDir, { recursive: true });
+  await mkdir(workspace, { recursive: true });
+  // Not the installer layout, so this goes through cmd.exe.
+  await writeFile(join(launcherDir, "ix.cmd"), `@echo off\r\nnode "${join(FAKE_DIR, "argv.cjs")}" %*\r\n`);
+  // What cmd.exe would run for `node` if it searched the working directory first.
+  await writeFile(join(workspace, "node.cmd"), `@echo off\r\ntype nul > "${planted}"\r\n`);
+  process.env["PATH"] = `${launcherDir}${delimiter}${dirname(process.execPath)}${delimiter}${ORIGINAL_PATH}`;
+
+  const launch = await ixLaunch("ix", ["x"]);
+  assert.equal(launch.windowsVerbatimArguments, true);
+
+  const result = await runIx(["text", "a&b"], { cwd: workspace });
+  assert.equal(result.ok, true, result.stderr);
+  assert.deepEqual((JSON.parse(result.stdout) as { argv: string[] }).argv, ["text", "a&b", "--format", "json"]);
+  assert.equal(await isMapped(workspace, "ix"), true);
+  assert.equal(existsSync(planted), false);
 });

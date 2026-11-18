@@ -6,7 +6,7 @@ import { appendFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { IX_BIN, IX_DEBUG_LOG, timeoutFor } from "./config.js";
 import { IxError } from "./errors.js";
-import { findExecutable, ixLaunch } from "./launch.js";
+import { childEnv, findExecutable, ixLaunch } from "./launch.js";
 import { withCache } from "../shared/cache.js";
 
 const execFileAsync = promisify(execFile);
@@ -22,11 +22,6 @@ export interface IxRunOptions {
   timeout?: number;
   /** Working directory for ix (the project root); defaults to the hook's cwd. */
   cwd?: string;
-}
-
-export interface ParallelCall {
-  args: string[];
-  label: string;
 }
 
 // ── Debug log ─────────────────────────────────────────────────────────────────
@@ -103,9 +98,11 @@ export async function runIx(
 
   try {
     const launch = await ixLaunch(IX_BIN, fullArgs);
+    const env = childEnv(launch);
     const { stdout, stderr } = await execFileAsync(launch.file, launch.args, {
       timeout,
       ...(opts.cwd ? { cwd: opts.cwd } : {}),
+      ...(env ? { env } : {}),
       maxBuffer: 10 * 1024 * 1024,
       windowsHide: true,
       windowsVerbatimArguments: launch.windowsVerbatimArguments,
@@ -132,34 +129,6 @@ export async function runIx(
     }
     return { ok: false, stdout: "", stderr: String(err), durationMs };
   }
-}
-
-// ── Parallel invocation ───────────────────────────────────────────────────────
-
-export async function runIxParallel(
-  calls: ParallelCall[],
-  opts: IxRunOptions = {},
-): Promise<Record<string, IxResult>> {
-  const settled = await Promise.allSettled(
-    calls.map((c) => runIx(c.args, opts)),
-  );
-
-  const result: Record<string, IxResult> = {};
-  for (let i = 0; i < calls.length; i++) {
-    const label = calls[i]!.label;
-    const outcome = settled[i]!;
-    if (outcome.status === "fulfilled") {
-      result[label] = outcome.value;
-    } else {
-      result[label] = {
-        ok: false,
-        stdout: "",
-        stderr: String(outcome.reason),
-        durationMs: 0,
-      };
-    }
-  }
-  return result;
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────

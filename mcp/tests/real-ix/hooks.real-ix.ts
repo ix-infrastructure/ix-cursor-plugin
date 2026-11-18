@@ -49,9 +49,6 @@ writeFileSync(
   "export function resolveWidgetConfig(name: string) {\n  return { name };\n}\n",
 );
 writeFileSync(join(PROJ, "use.ts"), 'import { resolveWidgetConfig } from "./widget";\nresolveWidgetConfig("a");\n');
-// A subdirectory, so a Grep scoped to it makes pre-search pass `ix text --path`.
-mkdirSync(join(PROJ, "lib"));
-writeFileSync(join(PROJ, "lib", "note.ts"), "export const note = 1;\n");
 
 const BASE_ENV: Record<string, string> = {
   PATH: process.env["PATH"] ?? "",
@@ -61,6 +58,9 @@ const BASE_ENV: Record<string, string> = {
   IX_NO_UPDATE_CHECK: "1",
   XDG_STATE_HOME: STATE,
   IX_HOOK_VERBOSITY: "brief",
+  // The search hooks are off by default; these tests drive them.
+  IX_HOOK_SEARCH: "true",
+  IX_HOOK_SHELL_SEARCH: "true",
   CURSOR_PLUGIN_ROOT: PLUGIN_ROOT,
 };
 
@@ -145,27 +145,12 @@ test("parser reads ix's real error record (unmapped workspace)", () => {
   assert.equal(typeof record.message, "string");
 });
 
-test("postToolUse Grep, unmapped: locate's error record is no answer, ripgrep hits still reported", async () => {
+test("postToolUse Grep, unmapped: locate's error record is no definition, so nothing is added", async () => {
   const r = await runHook("pre-search", "postToolUse", grepPayload);
   assert.equal(r.code, 0);
-  const out = JSON.parse(r.stdout) as Record<string, unknown>;
-  assertOutputFields("postToolUse", out);
-  const ctx = String(out["additional_context"]);
-  assert.match(ctx, /text hits in (widget|use)\.ts/);
-  assert.doesNotMatch(ctx, /symbol:|candidates:|workspace_not_mapped/, "an error record must not read as a symbol");
-  assert.match(r.log, /CMD ix text resolveWidgetConfig --limit 15 --format json/);
+  assert.equal(r.stdout, "", "an error record must not read as a definition");
   assert.match(r.log, /CMD ix locate resolveWidgetConfig --format json/);
-});
-
-test("postToolUse Grep with path and type: pre-search passes ix text --path and --language", async () => {
-  const r = await runHook("pre-search", "postToolUse", {
-    tool_name: "Grep",
-    tool_input: { pattern: "resolveWidgetConfig", path: join(PROJ, "lib"), type: "ts" },
-    cwd: PROJ,
-  });
-  assert.equal(r.code, 0);
-  if (r.stdout) assertOutputFields("postToolUse", JSON.parse(r.stdout) as Record<string, unknown>);
-  assert.match(r.log, /CMD ix text resolveWidgetConfig --limit 15 --path lib --language ts\b/);
+  assert.doesNotMatch(r.log, /CMD ix (text|callers) /, "no text search, and no callers without a definition");
 });
 
 test("postToolUse Write, unmapped: impact's non-zero error body is parsed and stays silent", async () => {
@@ -183,10 +168,7 @@ test("backend unreachable: every hook exits 0 and answers in Cursor's protocol",
   assert.notEqual(ix(["impact", "widget.ts", "--format", "json"]).code, 0, "impact really fails with no backend");
 
   const grep = await runHook("pre-search", "postToolUse", grepPayload);
-  assert.equal(grep.code, 0);
-  const out = JSON.parse(grep.stdout) as Record<string, unknown>;
-  assertOutputFields("postToolUse", out);
-  assert.match(String(out["additional_context"]), /text hits in/, "ix text needs no backend");
+  assert.deepEqual([grep.code, grep.stdout], [0, ""], "no backend, no definition, nothing added");
 
   const write = await runHook("edit-impact", "postToolUse", {
     tool_name: "Write",
@@ -236,13 +218,11 @@ test("every ix argv the plugin builds is accepted by this CLI (no unknown option
     ["status", "--format", "json", "--root", PROJ],
     ["map", PROJ, "--silent"],
   ];
-  // The optional Grep filters must be among what the hooks ran, so they are
-  // checked as pre-search builds them, not as this file spells them.
-  for (const flag of ["--path", "--language"]) {
-    assert.ok(ran.some((a) => a[0] === "text" && a.includes(flag)), `a hook ran ix text ${flag}`);
-  }
+  // With no backend locate never resolves, so the search hooks never reach
+  // `ix callers`. Keep in step with searchContext() in shared/search-context.ts.
+  const callers = [["callers", "resolveWidgetConfig", "--format", "json"]];
   const rejected: string[] = [];
-  for (const args of [...ran, ...autoMap]) {
+  for (const args of [...ran, ...autoMap, ...callers]) {
     const r = ix(args);
     if (/unknown (option|command)|too many arguments|missing required argument/i.test(r.stderr)) {
       rejected.push(`ix ${args.join(" ")}\n    ${r.stderr.trim().split("\n")[0]}`);
