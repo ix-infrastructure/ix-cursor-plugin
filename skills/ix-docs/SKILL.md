@@ -1,6 +1,7 @@
 ---
 name: ix-docs
 description: Generate narrative-first, importance-weighted documentation for a repo, system, or subsystem with a selective reference layer. Use --full for deeper module/class/method coverage.
+disable-model-invocation: true
 argument-hint: <target> [--full] [--style narrative|reference|hybrid] [--split] [--single-doc] [--out <path>] [--save [path]]
 ---
 

@@ -1,6 +1,6 @@
 ---
-description: Graph-first decision rules for ix-memory. Apply when exploring code, locating symbols, or answering structural questions.
-alwaysApply: true
+description: For questions about code structure (where a symbol is, what calls it, what an edit affects) use ix_* tools such as ix_locate, ix_explain, ix_callers and ix_impact before grep or reading whole files.
+alwaysApply: false
 ---
 
 ## Graph-First Hierarchy

@@ -79,9 +79,9 @@ When it is available, one `ix_briefing` call reports the active goals, active pl
 
 **Raw MCP tools** — use directly for single-step structural lookups: "where is X defined?", "what calls X?", "what does X import?". Cheaper than invoking a skill.
 
-**Skills** (`/ix-understand`, `/ix-investigate`, etc.) — use when the task has multiple phases or requires synthesis. Skills sequence queries, stop early, and produce structured output. Always prefer a skill over a chain of manual tool calls.
+**Skills** (`/ix-understand`, `/ix-investigate`, etc.) — slash commands the user runs; the model does not invoke them on its own. Use when the task has multiple phases or requires synthesis. Skills sequence queries, stop early, and produce structured output. For a multi-phase task, point the user to the matching skill rather than running a long chain of manual tool calls.
 
-**Rules** (`graph-first.mdc`, `token-budgets.mdc`, etc.) — injected automatically at all times. Do not duplicate rule logic in skill prompts.
+**Rules** (`graph-first.mdc`, `token-budgets.mdc`, etc.) — agent-requested: Cursor lists each rule's description and the agent reads the rule when it applies (`docs-mode.mdc` also attaches to docs files). None is always applied. Do not duplicate rule logic in skill prompts.
 
 **Agents** (`ix-system-explorer`, `ix-bug-investigator`, etc.) — delegate only for large, delegatable work: full architecture exploration, autonomous bug investigation, large refactor planning. Too expensive for routine questions. Skills call agents automatically when depth warrants it.
 

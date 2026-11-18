@@ -1,6 +1,7 @@
 ---
 name: ix-debug
 description: Root cause analysis — trace execution path to a failure, narrow candidates, read minimal source only at suspected failure points.
+disable-model-invocation: true
 argument-hint: <error message, symptom description, or name of failing function> [--save [path]]
 ---
 

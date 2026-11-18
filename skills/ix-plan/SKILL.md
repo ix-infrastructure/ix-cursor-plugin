@@ -1,6 +1,7 @@
 ---
 name: ix-plan
 description: Generate a risk-ordered implementation plan for a set of targets. Assesses blast radius per target, finds data flows between them, and produces a safe change sequence.
+disable-model-invocation: true
 argument-hint: <symbol1> [symbol2...] or "description of what you want to change" [--save [path]]
 ---
 
